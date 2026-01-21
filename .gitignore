@@ -1,0 +1,17 @@
+# Runtime / state (NFS, DB, logs, etc.)
+data/
+logs/
+
+# Node
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Secrets
+.env
+.env.*
+*.secret
+
+# OS
+.DS_Store

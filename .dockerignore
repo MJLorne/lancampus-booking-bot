@@ -1,0 +1,19 @@
+cat > .gitignore <<'EOF'
+# Secrets
+.env
+.env.*
+*.secret
+
+# Docker / Swarm
+docker-stack*.yml
+
+# Runtime data
+data/
+logs/
+
+# Node
+node_modules/
+
+# OS
+.DS_Store
+EOF
