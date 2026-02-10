@@ -1268,7 +1268,7 @@ client.on("interactionCreate", async (interaction) => {
 });
 
 /* ================== START ================== */
-client.once("ready", async () => {
+client.once("clientReady", async () => {
   console.log(`✅ Bot logged in as ${client.user.tag}`);
   try {
     await registerCommands();
