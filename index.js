@@ -10,7 +10,10 @@ import {
   ButtonBuilder,
   ButtonStyle,
   StringSelectMenuBuilder,
-  StringSelectMenuOptionBuilder
+  StringSelectMenuOptionBuilder,
+  REST,
+  Routes,
+  SlashCommandBuilder
 } from "discord.js";
 
 /* ================== ENV ================== */
@@ -61,6 +64,22 @@ const SMALL_AREA_TASKS_MAX = 5; // <=5 Buttons, sonst Dropdown
 
 async function ensureDataDir() {
   await fs.mkdir(DATA_DIR, { recursive: true });
+}
+
+async function registerCommands() {
+  const refreshCmd = new SlashCommandBuilder()
+	  .setName("refresh")
+	  .setDescription("Admin: Aktualisiert die Buchungsübersicht/Embed in diesem Channel")
+	  .setDefaultMemberPermissions(PermissionsBitField.Flags.Administrator);
+
+  const rest = new REST({ version: "10" }).setToken(DISCORD_TOKEN);
+
+  await rest.put(
+    Routes.applicationGuildCommands(client.user.id, GUILD_ID),
+    { body: [refreshCmd.toJSON()] }
+  );
+
+  console.log("✅ Slash command /refresh registriert");
 }
 
 async function loadBookings() {
@@ -726,17 +745,18 @@ app.post("/wpbs/new-booking", async (req, res) => {
     const booking_id = body.booking_id;
     if (!booking_id) return res.status(400).send("missing booking_id");
 
-    const {
-      booking_date,
-      start_date,
-      end_date,
-      start_time,
-      end_time,
-      firstname,
-      lastname,
-      persons,
-      laundry_package
-    } = body;
+	const {
+	  booking_date,
+	  start_date,
+	  end_date,
+	  start_time,
+	  end_time,
+	  firstname,
+	  lastname,
+	  persons,
+	  laundry_package,
+	  club_name
+	} = body;
 
     const fullName = [lastname, firstname].filter(Boolean).join(" ").trim();
     const zeitraum = buildZeitraum({
@@ -755,12 +775,35 @@ app.post("/wpbs/new-booking", async (req, res) => {
 
     // Idempotenz: existiert booking schon?
     const existing = await getBooking(String(booking_id));
-    if (existing?.channel_id) {
-      const existingChannel = await client.channels.fetch(existing.channel_id).catch(() => null);
-      if (existingChannel?.isTextBased()) {
-        return res.json({ ok: true, channel_id: existing.channel_id, reused: true });
-      }
-    }
+   if (existing?.channel_id) {
+  const existingChannel = await client.channels.fetch(existing.channel_id).catch(() => null);
+  if (existingChannel?.isTextBased()) {
+
+		// Daten updaten (club_name, zeiten, etc.)
+	await upsertBooking({
+	  booking_id: String(booking_id),
+	  start_date: normalizeDateToYMD(start_date),
+	  end_date: normalizeDateToYMD(end_date),
+	  start_time: start_time || null,
+	  end_time: end_time || null,
+	  booking_date: booking_date || null,
+	  firstname: firstname || null,
+	  lastname: lastname || null,
+	  club_name: clubName,
+	  persons: persons || null,
+	  laundry_package: laundry_package || null,
+	  channel_id: existing.channel_id,
+	  channel_name: existing.channel_id ? (existing.channel_name || null) : null
+	});
+
+		// Optional: Topic direkt nachziehen
+		const refreshedTopic =
+		  `${zeitraum}${fullName ? ` | ${fullName}` : ""}${clubName ? ` | Verein: ${clubName}` : ""}`.slice(0, 1024);
+		await existingChannel.setTopic(refreshedTopic).catch(() => {});
+
+		return res.json({ ok: true, channel_id: existing.channel_id, reused: true, updated: true });
+	  }
+	}
 
     const safeId = String(booking_id).replace(/[^a-zA-Z0-9]/g, "");
     const nameSlug = slugify(fullName, 30);
@@ -768,68 +811,85 @@ app.post("/wpbs/new-booking", async (req, res) => {
     const arrival = normalizeDateToYMD(start_date);
     const channelName = [arrival, safeId, nameSlug].filter(Boolean).join("-").slice(0, 90);
 
-    const channel = await guild.channels.create({
-      name: channelName,
-      type: ChannelType.GuildText,
-      parent: INTERNAL_CATEGORY_ID,
-      topic: `${zeitraum}${fullName ? ` | ${fullName}` : ""}`.slice(0, 1024)
-    });
-	
-	await auditLog(`📥 Neue Buchung ${booking_id} → Channel erstellt: <#${channel.id}>`);
+const clubName = (club_name && String(club_name).trim()) || null;
 
-    await upsertBooking({
-	  cleaning_checklist: defaultCleaningChecklist(),
-      cleaning_overview_message_id: null,
-      cleaning_select_message_id: null,
-      booking_id: String(booking_id),
-      channel_id: channel.id,
-      channel_name: channel.name,
-      start_date: normalizeDateToYMD(start_date),
-      end_date: normalizeDateToYMD(end_date),
-      booking_date: booking_date || null,
-      firstname: firstname || null,
-      lastname: lastname || null,
-      persons: persons || null,
-      laundry_package: laundry_package || null,
-      assignee: null,
-      reminders_sent: {},
-      archived: false
-    });
+const channel = await guild.channels.create({
+  name: channelName,
+  type: ChannelType.GuildText,
+  parent: INTERNAL_CATEGORY_ID,
+  topic: `${zeitraum}${fullName ? ` | ${fullName}` : ""}${clubName ? ` | Verein: ${clubName}` : ""}`.slice(0, 1024)
+});
 
-    const embed = {
-      title: "Buchungsdetails",
-      fields: [
-        { name: "Name, Vorname", value: fullName || "—", inline: true },
-        { name: "Buchungsdatum", value: booking_date || "—", inline: true },
-        { name: "Booking-ID", value: String(booking_id), inline: true },
-        { name: "Buchungszeitraum", value: zeitraum, inline: false },
-        { name: "Personen", value: persons ? String(persons) : "—", inline: true },
-        { name: "Wäschepaket", value: laundry_package ? String(laundry_package) : "—", inline: true }
-      ]
-    };
+await auditLog(`📥 Neue Buchung ${booking_id} → Channel erstellt: <#${channel.id}>`);
 
-	const row = new ActionRowBuilder().addComponents(
-	  new ButtonBuilder()
-		.setCustomId("assign_booking")
-		.setLabel("Ich betreue diese Buchung")
-		.setStyle(ButtonStyle.Primary),
-	  new ButtonBuilder()
-		.setCustomId("change_assignee")
-		.setLabel("Betreuer ändern")
-		.setStyle(ButtonStyle.Secondary),
-	  new ButtonBuilder()
-		.setCustomId("archive_now")
-		.setLabel("Archivieren jetzt")
-		.setEmoji("📦")
-		.setStyle(ButtonStyle.Danger)
-	);
+// 1) Embed + Buttons bauen
+const embed = {
+  title: "Buchungsdetails",
+  fields: [
+    { name: "Name, Vorname", value: fullName || "—", inline: true },
+    { name: "Verein", value: clubName || "—", inline: true },
+    { name: "Buchungsdatum", value: booking_date || "—", inline: true },
+    { name: "Booking-ID", value: String(booking_id), inline: true },
+    { name: "Buchungszeitraum", value: zeitraum, inline: false },
+    { name: "Personen", value: persons ? String(persons) : "—", inline: true },
+    { name: "Wäschepaket", value: laundry_package ? String(laundry_package) : "—", inline: true }
+  ]
+};
 
-		await channel.send({ content: "📥 Neue Buchung eingegangen", embeds: [embed], components: [row] });
-		await ensureCleaningOverviewPinned(channel, String(booking_id));
-		await ensureCleaningSelectMessage(channel, String(booking_id));
-		await auditLog(`📥 Neue Buchung: **${booking_id}** → <#${channel.id}> (${fullName || "—"})`);
+const row = new ActionRowBuilder().addComponents(
+  new ButtonBuilder()
+    .setCustomId("assign_booking")
+    .setLabel("Ich betreue diese Buchung")
+    .setStyle(ButtonStyle.Primary),
+  new ButtonBuilder()
+    .setCustomId("change_assignee")
+    .setLabel("Betreuer ändern")
+    .setStyle(ButtonStyle.Secondary),
+  new ButtonBuilder()
+    .setCustomId("archive_now")
+    .setLabel("Archivieren jetzt")
+    .setEmoji("📦")
+    .setStyle(ButtonStyle.Danger)
+);
 
-		return res.json({ ok: true, channel_id: channel.id });
+// 2) Overview Message senden
+const overviewMsg = await channel.send({
+  content: "📥 Neue Buchung eingegangen",
+  embeds: [embed],
+  components: [row]
+});
+
+// 3) Booking speichern (inkl. Zeiten + clubName + overview_message_id)
+await upsertBooking({
+  cleaning_checklist: defaultCleaningChecklist(),
+  cleaning_overview_message_id: null,
+  cleaning_select_message_id: null,
+  booking_id: String(booking_id),
+  channel_id: channel.id,
+  channel_name: channel.name,
+  start_date: normalizeDateToYMD(start_date),
+  end_date: normalizeDateToYMD(end_date),
+  start_time: start_time || null,
+  end_time: end_time || null,
+  booking_date: booking_date || null,
+  firstname: firstname || null,
+  lastname: lastname || null,
+  club_name: clubName,
+  persons: persons || null,
+  laundry_package: laundry_package || null,
+  assignee: null,
+  reminders_sent: {},
+  archived: false,
+  overview_message_id: overviewMsg.id
+});
+
+// 4) Cleaning UI
+await ensureCleaningOverviewPinned(channel, String(booking_id));
+await ensureCleaningSelectMessage(channel, String(booking_id));
+
+await auditLog(`📥 Neue Buchung: **${booking_id}** → <#${channel.id}> (${fullName || "—"})`);
+
+return res.json({ ok: true, channel_id: channel.id });
 	  } catch (err) {
 		console.error(err);
 		return res.status(500).send("error");
@@ -838,6 +898,84 @@ app.post("/wpbs/new-booking", async (req, res) => {
 
 /* ================== BUTTONS ================== */
 client.on("interactionCreate", async (interaction) => {
+	 // ===== Slash Commands =====
+  if (interaction.isChatInputCommand()) {
+    if (interaction.commandName !== "refresh") return;
+
+    if (!isAdmin(interaction.member)) {
+      return interaction.reply({ content: "❌ Nur Admins dürfen /refresh nutzen.", ephemeral: true });
+    }
+
+    const channel = interaction.channel;
+    if (!channel?.isTextBased()) {
+      return interaction.reply({ content: "❌ Das geht nur in einem Text-Channel.", ephemeral: true });
+    }
+
+    const bookingId = extractBookingIdFromChannelName(channel.name);
+    if (!bookingId) {
+      return interaction.reply({ content: "❌ Keine Booking-ID im Channelnamen gefunden.", ephemeral: true });
+    }
+
+    await interaction.deferReply({ ephemeral: true });
+
+    const b = await getBooking(bookingId);
+    if (!b) {
+      return interaction.editReply("❌ Booking nicht in bookings.json gefunden.");
+    }
+
+    const fullName = [b.lastname, b.firstname].filter(Boolean).join(" ").trim();
+    const zeitraum = buildZeitraum({
+      start_date: b.start_date,
+      end_date: b.end_date,
+      start_time: b.start_time,
+      end_time: b.end_time
+    });
+
+    const embed = {
+      title: "Buchungsdetails",
+      fields: [
+        { name: "Name, Vorname", value: fullName || "—", inline: true },
+        { name: "Verein", value: b.club_name ? String(b.club_name) : "—", inline: true },
+        { name: "Buchungsdatum", value: b.booking_date || "—", inline: true },
+        { name: "Booking-ID", value: String(b.booking_id), inline: true },
+        { name: "Buchungszeitraum", value: zeitraum, inline: false },
+        { name: "Personen", value: b.persons ? String(b.persons) : "—", inline: true },
+        { name: "Wäschepaket", value: b.laundry_package ? String(b.laundry_package) : "—", inline: true }
+      ]
+    };
+
+    // 1) bevorzugt: gespeicherte overview_message_id editieren
+    let edited = false;
+    if (b.overview_message_id) {
+      const msg = await channel.messages.fetch(b.overview_message_id).catch(() => null);
+      if (msg && msg.author?.id === client.user.id) {
+        await msg.edit({ embeds: [embed] }).catch(() => {});
+        edited = true;
+      }
+    }
+
+    // 2) Fallback: letzte 50 Messages nach "Buchungsdetails" vom Bot durchsuchen
+    if (!edited) {
+      const msgs = await channel.messages.fetch({ limit: 50 }).catch(() => null);
+      const candidate = msgs?.find((m) =>
+        m.author?.id === client.user.id &&
+        (m.embeds?.[0]?.title === "Buchungsdetails")
+      );
+
+      if (candidate) {
+        await candidate.edit({ embeds: [embed] }).catch(() => {});
+        await updateBooking(bookingId, { overview_message_id: candidate.id });
+        edited = true;
+      }
+    }
+
+    // Topic optional aktualisieren (du nutzt Topic eh für Verein)
+    const topic = `${zeitraum}${fullName ? ` | ${fullName}` : ""}${b.club_name ? ` | Verein: ${b.club_name}` : ""}`.slice(0, 1024);
+    await channel.setTopic(topic).catch(() => {});
+
+    await auditLog(`🔄 /refresh: **${bookingId}** in <#${channel.id}> von <@${interaction.user.id}> (${edited ? "embed aktualisiert" : "embed nicht gefunden"})`);
+    return interaction.editReply(edited ? "✅ Aktualisiert (Embed + Topic)." : "⚠️ Topic aktualisiert, aber Buchungs-Embed nicht gefunden.");
+  }
     if (!(interaction.isButton() || interaction.isStringSelectMenu())) return;
 	
 	if (interaction.isButton() && interaction.customId === "cleaning_finish") {
@@ -1130,8 +1268,9 @@ client.on("interactionCreate", async (interaction) => {
 });
 
 /* ================== START ================== */
-client.once("clientReady", () => {
+client.once("clientReady", async () => {
   console.log(`✅ Bot logged in as ${client.user.tag}`);
+  await registerCommands();
   startLoops();
 });
 
