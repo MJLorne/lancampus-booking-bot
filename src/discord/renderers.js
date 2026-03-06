@@ -1,4 +1,4 @@
-import { ActionRowBuilder, ButtonBuilder, ButtonStyle } from "discord.js";
+import { ActionRowBuilder, ButtonBuilder, ButtonStyle, UserSelectMenuBuilder } from "discord.js";
 import { normalizeDateToYMD, buildFullName, buildZeitraum } from "../utils/booking.js";
 import { canArchiveBooking } from "../services/cleaningService.js";
 
@@ -51,18 +51,15 @@ export function buildBookingEmbed(booking) {
   };
 }
 
-export function buildBookingActionRow(booking) {
-  return new ActionRowBuilder().addComponents(
+export function buildBookingActionRows(booking) {
+
+  const row1 = new ActionRowBuilder().addComponents(
     new ButtonBuilder()
       .setCustomId("assign_booking")
       .setLabel(booking?.assignee?.user_id ? "Bereits betreut" : "Ich betreue diese Buchung")
       .setStyle(ButtonStyle.Primary)
       .setDisabled(!!booking?.assignee?.user_id || !!booking?.archived),
-    new ButtonBuilder()
-      .setCustomId("change_assignee")
-      .setLabel("Betreuer ändern")
-      .setStyle(ButtonStyle.Secondary)
-      .setDisabled(!!booking?.archived),
+
     new ButtonBuilder()
       .setCustomId("archive_now")
       .setLabel("Archivieren jetzt")
@@ -70,6 +67,17 @@ export function buildBookingActionRow(booking) {
       .setStyle(ButtonStyle.Danger)
       .setDisabled(!!booking?.archived || !canArchiveBooking(booking))
   );
+
+  const row2 = new ActionRowBuilder().addComponents(
+    new UserSelectMenuBuilder()
+      .setCustomId("select_assignee")
+      .setPlaceholder("Betreuer auswählen")
+      .setMinValues(1)
+      .setMaxValues(1)
+      .setDisabled(!!booking?.archived)
+  );
+
+  return [row1, row2];
 }
 
 export function reactivateButtonRow() {

@@ -59,6 +59,52 @@ export function registerInteractionHandlers(client, deps) {
       }
 
       if (interaction.isStringSelectMenu()) {
+		  if (interaction.customId === "select_assignee") {
+
+  if (!canChangeAssignee(member)) {
+    await interaction.reply({
+      content: "❌ Nur Admins oder berechtigte Staff-Rollen dürfen den Betreuer ändern.",
+      ephemeral: true
+    });
+    return;
+  }
+
+  const selectedUserId = interaction.values?.[0];
+
+  const booking = await store.getBookingByChannelId(channel.id);
+
+  if (!booking) {
+    await interaction.reply({
+      content: "❌ Buchung konnte nicht geladen werden.",
+      ephemeral: true
+    });
+    return;
+  }
+
+  const memberObj = await interaction.guild.members.fetch(selectedUserId);
+
+  const updatedBooking = await store.updateBooking(booking.booking_id, {
+    assignee: {
+      user_id: memberObj.id,
+      display_name: memberObj.displayName,
+      assigned_at: new Date().toISOString(),
+      changed_by_admin: true
+    }
+  });
+
+  await interaction.reply({
+    content: `👤 Betreuer geändert auf **${memberObj.displayName}**`,
+    ephemeral: false
+  });
+
+  await syncBookingChannel({ channel, booking: updatedBooking, client, store });
+
+  await audit.log(
+    `🔁 Betreuer geändert: **${booking.booking_id}** → ${memberObj.displayName} (<@${memberObj.id}>) in <#${channel.id}>`
+  );
+
+  return;
+}
         if (interaction.customId === "cleaning_select_area") {
           const areaKey = interaction.values?.[0];
           if (!bookingId) return;
@@ -194,22 +240,6 @@ export function registerInteractionHandlers(client, deps) {
         return;
       }
 
-      if (interaction.isButton() && interaction.customId === "change_assignee") {
-        if (!canChangeAssignee(member)) {
-          await interaction.reply({ content: "❌ Nur Admins oder berechtigte Staff-Rollen dürfen den Betreuer ändern.", ephemeral: true });
-          return;
-        }
-        await interaction.deferUpdate();
-        await pinSingleAssignee(channel, memberName, interaction.user.id, client.user.id);
-        await channel.send(`🔁 **Betreuer geändert:** ${memberName}`);
-        if (bookingId) {
-          const updatedBooking = await store.updateBooking(bookingId, {
-            assignee: { user_id: interaction.user.id, display_name: memberName, assigned_at: new Date().toISOString(), changed_by_admin: true },
-          });
-          await syncBookingChannel({ channel, booking: updatedBooking, client, store });
-        }
-        await audit.log(`🔁 Betreuer geändert: **${bookingId || "?"}** → ${memberName} (<@${interaction.user.id}>) in <#${channel.id}>`);
-      }
     } catch (err) {
       console.error("interactionCreate error:", err);
       try {
