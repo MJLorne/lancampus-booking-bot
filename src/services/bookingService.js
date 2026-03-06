@@ -1,6 +1,6 @@
 import { ChannelType, PermissionsBitField } from "discord.js";
 import { config } from "../config.js";
-import { buildBookingEmbed, buildBookingActionRow, buildChannelTopic } from "../discord/renderers.js";
+import { buildBookingEmbed, buildBookingActionRows, buildChannelTopic } from "../discord/renderers.js";
 import { defaultCleaningChecklist, ensureTasksInChecklist, renderCleaningOverviewText, cleaningFinishRow, cleaningAreaSelectRow, renderAreaDetailText, buildTaskControls } from "./cleaningService.js";
 import { normalizeDateToYMD, buildFullName, buildZeitraum, slugify } from "../utils/booking.js";
 
