@@ -26,7 +26,7 @@ export async function pinSingleAssignee(channel, assignee, setterUserId, clientU
 export async function syncOverviewMessage({ channel, booking, client, store }) {
   if (!channel?.isTextBased() || !booking) return false;
   const embed = buildBookingEmbed(booking);
-  const row = buildBookingActionRow(booking);
+  const row = buildBookingActionRows(booking);
 
   if (booking.overview_message_id) {
     const msg = await channel.messages.fetch(booking.overview_message_id).catch(() => null);
@@ -192,7 +192,7 @@ export async function createOrUpdateBookingFromWebhook({ body, client, store, au
   const overviewMsg = await channel.send({
     content: "📥 Neue Buchung eingegangen",
     embeds: [buildBookingEmbed(initialBooking)],
-    components: [buildBookingActionRow(initialBooking)],
+    components: [buildBookingActionRows(initialBooking)],
   });
 
   const savedBooking = await store.upsertBooking({ ...initialBooking, channel_id: channel.id, channel_name: channel.name, overview_message_id: overviewMsg.id });
