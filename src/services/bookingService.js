@@ -192,7 +192,7 @@ export async function createOrUpdateBookingFromWebhook({ body, client, store, au
   const overviewMsg = await channel.send({
     content: "📥 Neue Buchung eingegangen",
     embeds: [buildBookingEmbed(initialBooking)],
-    components: [buildBookingActionRows(initialBooking)],
+    components: buildBookingActionRows(initialBooking),
   });
 
   const savedBooking = await store.upsertBooking({ ...initialBooking, channel_id: channel.id, channel_name: channel.name, overview_message_id: overviewMsg.id });
