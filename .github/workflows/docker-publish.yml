@@ -2,13 +2,12 @@ name: Build and Push Docker Image
 
 on:
   push:
-    branches: [ main ]
-    tags: [ 'v*.*.*' ]
-  workflow_dispatch:
+    branches: [ "main" ]
 
 jobs:
   docker:
     runs-on: ubuntu-latest
+
     permissions:
       contents: read
       packages: write
@@ -30,17 +29,10 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Extract metadata
-        id: meta
-        uses: docker/metadata-action@v5
-        with:
-          images: ghcr.io/${{ github.repository }}
-
-      - name: Build and push
+      - name: Build and push multi-arch image
         uses: docker/build-push-action@v6
         with:
           context: .
-          platforms: linux/amd64,linux/arm64
           push: true
-          tags: ${{ steps.meta.outputs.tags }}
-          labels: ${{ steps.meta.outputs.labels }}
+          tags: ghcr.io/mjlorne/lancampus-booking-bot:latest
+          platforms: linux/amd64,linux/arm64,linux/arm/v7
