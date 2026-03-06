@@ -13,7 +13,7 @@ export function isAdmin(member) {
 }
 
 export async function pinSingleAssignee(channel, assignee, setterUserId, clientUserId) {
-  const pins = await channel.messages.fetchPinned();
+  const pins = await channel.messages.fetchPins();
   for (const [, msg] of pins) {
     if (msg.author?.id === clientUserId && msg.content?.startsWith("📌 **Betreuer:**")) {
       await msg.unpin().catch(() => {});
@@ -26,12 +26,12 @@ export async function pinSingleAssignee(channel, assignee, setterUserId, clientU
 export async function syncOverviewMessage({ channel, booking, client, store }) {
   if (!channel?.isTextBased() || !booking) return false;
   const embed = buildBookingEmbed(booking);
-  const row = buildBookingActionRows(booking);
+  const rows = buildBookingActionRows(booking);
 
   if (booking.overview_message_id) {
     const msg = await channel.messages.fetch(booking.overview_message_id).catch(() => null);
     if (msg && msg.author?.id === client.user.id) {
-      await msg.edit({ content: "📥 Neue Buchung eingegangen", embeds: [embed], components: [row] }).catch((err) => console.error("overview edit failed:", err?.message || err));
+      await msg.edit({ content: "📥 Neue Buchung eingegangen", embeds: [embed], components: rows }).catch((err) => console.error("overview edit failed:", err?.message || err));
       return true;
     }
   }
@@ -39,7 +39,7 @@ export async function syncOverviewMessage({ channel, booking, client, store }) {
   const msgs = await channel.messages.fetch({ limit: 50 }).catch(() => null);
   const candidate = msgs?.find((m) => m.author?.id === client.user.id && m.embeds?.[0]?.title === "Buchungsdetails");
   if (candidate) {
-    await candidate.edit({ content: "📥 Neue Buchung eingegangen", embeds: [embed], components: [row] }).catch((err) => console.error("overview fallback edit failed:", err?.message || err));
+    await candidate.edit({ content: "📥 Neue Buchung eingegangen", embeds: [embed], components: rows }).catch((err) => console.error("overview fallback edit failed:", err?.message || err));
     if (candidate.id !== booking.overview_message_id) {
       await store.updateBooking(booking.booking_id, { overview_message_id: candidate.id });
     }
@@ -58,7 +58,7 @@ export async function ensureCleaningOverviewPinned({ channel, bookingId, store }
     const msg = await channel.messages.fetch(booking.cleaning_overview_message_id).catch(() => null);
     if (msg) {
       await msg.edit({ content: text, components }).catch(() => {});
-      const pins = await channel.messages.fetchPinned();
+      const pins = await chchannel.messages.fetchPins();
       if (![...pins.values()].some((m) => m.id === msg.id)) await msg.pin().catch(() => {});
       return msg;
     }

@@ -17,17 +17,17 @@ export async function handleChatInputCommand(interaction, deps) {
   const { client, store, audit } = deps;
   if (interaction.commandName !== "refresh") return false;
   if (!isAdmin(interaction.member)) {
-    await interaction.reply({ content: "❌ Nur Admins dürfen /refresh nutzen.", ephemeral: true });
+    await interaction.reply({ content: "❌ Nur Admins dürfen /refresh nutzen.", flags: MessageFlags.Ephemeral });
     return true;
   }
 
   const channel = interaction.channel;
   if (!channel?.isTextBased()) {
-    await interaction.reply({ content: "❌ Das geht nur in einem Text-Channel.", ephemeral: true });
+    await interaction.reply({ content: "❌ Das geht nur in einem Text-Channel.", flags: MessageFlags.Ephemeral });
     return true;
   }
 
-  await interaction.deferReply({ ephemeral: true });
+  await interaction.deferReply({ flags: MessageFlags.Ephemeral });
   const booking = await store.getBookingByChannelId(channel.id);
   if (!booking) {
     await interaction.editReply("❌ Booking nicht in bookings.json gefunden.");

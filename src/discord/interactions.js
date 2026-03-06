@@ -1,4 +1,5 @@
 import { config } from "../config.js";
+import { MessageFlags } from "discord.js";
 import { getAssigneeFromTopic } from "./renderers.js";
 import {
   allAreasCompleted,
@@ -35,7 +36,7 @@ export function registerInteractionHandlers(client, deps) {
 
       if (interaction.isButton() && interaction.customId === "cleaning_finish") {
         if (!bookingId) {
-          await interaction.reply({ content: "❌ Keine Booking-ID gefunden.", ephemeral: true });
+          await interaction.reply({ content: "❌ Keine Booking-ID gefunden.", flags: MessageFlags.Ephemeral });
           return;
         }
         await interaction.deferUpdate();
@@ -64,7 +65,7 @@ export function registerInteractionHandlers(client, deps) {
   if (!canChangeAssignee(member)) {
     await interaction.reply({
       content: "❌ Nur Admins oder berechtigte Staff-Rollen dürfen den Betreuer ändern.",
-      ephemeral: true
+      flags: MessageFlags.Ephemeral
     });
     return;
   }
@@ -76,7 +77,7 @@ export function registerInteractionHandlers(client, deps) {
   if (!booking) {
     await interaction.reply({
       content: "❌ Buchung konnte nicht geladen werden.",
-      ephemeral: true
+      flags: MessageFlags.Ephemeral
     });
     return;
   }
@@ -120,7 +121,7 @@ export function registerInteractionHandlers(client, deps) {
           const areaKey = interaction.customId.split(":")[1];
           const taskKey = interaction.values?.[0];
           if (!bookingId) {
-            await interaction.reply({ content: "❌ Keine Booking-ID gefunden.", ephemeral: true });
+            await interaction.reply({ content: "❌ Keine Booking-ID gefunden.", flags: MessageFlags.Ephemeral });
             return;
           }
           const picked = { ...(channelBooking?.cleaning_picked_task || {}) };
@@ -134,7 +135,7 @@ export function registerInteractionHandlers(client, deps) {
       if (interaction.isButton() && interaction.customId.startsWith("cleaning_toggle:")) {
         const [, areaKey, taskKey] = interaction.customId.split(":");
         if (!bookingId) {
-          await interaction.reply({ content: "❌ Keine Booking-ID gefunden.", ephemeral: true });
+          await interaction.reply({ content: "❌ Keine Booking-ID gefunden.", flags: MessageFlags.Ephemeral });
           return;
         }
         await interaction.deferUpdate();
@@ -154,7 +155,7 @@ export function registerInteractionHandlers(client, deps) {
       if (interaction.isButton() && interaction.customId.startsWith("cleaning_toggle_picked:")) {
         const areaKey = interaction.customId.split(":")[1];
         if (!bookingId) {
-          await interaction.reply({ content: "❌ Keine Booking-ID gefunden.", ephemeral: true });
+          await interaction.reply({ content: "❌ Keine Booking-ID gefunden.", flags: MessageFlags.Ephemeral });
           return;
         }
         await interaction.deferUpdate();
@@ -178,7 +179,7 @@ export function registerInteractionHandlers(client, deps) {
 
       if (interaction.isButton() && interaction.customId === "archive_now") {
         if (!isAdmin(interaction.member)) {
-          await interaction.reply({ content: "❌ Nur Admins können manuell archivieren.", ephemeral: true });
+          await interaction.reply({ content: "❌ Nur Admins können manuell archivieren.", flags: MessageFlags.Ephemeral });
           return;
         }
         await interaction.deferUpdate();
@@ -197,7 +198,7 @@ export function registerInteractionHandlers(client, deps) {
 
       if (interaction.isButton() && interaction.customId === "reactivate_booking") {
         if (!isAdmin(interaction.member)) {
-          await interaction.reply({ content: "❌ Nur Admins können Buchungen reaktivieren.", ephemeral: true });
+          await interaction.reply({ content: "❌ Nur Admins können Buchungen reaktivieren.", flags: MessageFlags.Ephemeral });
           return;
         }
         await interaction.deferUpdate();
@@ -206,7 +207,7 @@ export function registerInteractionHandlers(client, deps) {
         if (channel.name.startsWith("📦-")) {
           await channel.setName(channel.name.replace(/^📦-/, "")).catch(() => {});
         }
-        const pins = await channel.messages.fetchPinned();
+        const pins = await channel.messages.fetchPins();
         for (const [, msg] of pins) {
           const hasReactivate = msg.author?.id === client.user.id && msg.components?.some((row) => row.components?.some((c) => c.customId === "reactivate_booking"));
           if (hasReactivate) await msg.unpin().catch(() => {});
@@ -224,7 +225,7 @@ export function registerInteractionHandlers(client, deps) {
       if (interaction.isButton() && interaction.customId === "assign_booking") {
         const existing = channelBooking?.assignee?.display_name || getAssigneeFromTopic(channel.topic);
         if (existing) {
-          await interaction.reply({ content: `❌ Diese Buchung wird bereits betreut von **${existing}**.`, ephemeral: true });
+          await interaction.reply({ content: `❌ Diese Buchung wird bereits betreut von **${existing}**.`, flags: MessageFlags.Ephemeral });
           return;
         }
         await interaction.deferUpdate();
@@ -244,7 +245,7 @@ export function registerInteractionHandlers(client, deps) {
       console.error("interactionCreate error:", err);
       try {
         if (interaction.isRepliable() && !interaction.replied && !interaction.deferred) {
-          await interaction.reply({ content: "❌ Fehler bei der Aktion.", ephemeral: true });
+          await interaction.reply({ content: "❌ Fehler bei der Aktion.", flags: MessageFlags.Ephemeral });
         }
       } catch {}
     }
