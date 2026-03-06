@@ -1,20 +1,10 @@
-FROM node:22-alpine
-
+FROM node:20-alpine
 WORKDIR /app
 
-# optional: wget für Healthcheck im Container
-RUN apk add --no-cache wget
-
-# Dependencies zuerst (Build-Cache)
 COPY package*.json ./
-RUN npm ci --omit=dev
+RUN npm install --omit=dev
 
-# App-Code
-COPY . .
+COPY src ./src
 
 ENV NODE_ENV=production
-ENV TZ=Europe/Berlin
-ENV PORT=3000
-
-EXPOSE 3000
-CMD ["node", "index.js"]
+CMD ["node", "src/app.js"]

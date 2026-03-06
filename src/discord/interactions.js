@@ -1,0 +1,222 @@
+import { config } from "../config.js";
+import { getAssigneeFromTopic } from "./renderers.js";
+import {
+  allAreasCompleted,
+  defaultCleaningChecklist,
+  ensureTasksInChecklist,
+  canArchiveBooking,
+} from "../services/cleaningService.js";
+import {
+  canChangeAssignee,
+  ensureCleaningOverviewPinned,
+  pinSingleAssignee,
+  syncBookingChannel,
+  upsertCleaningDetailMessage,
+} from "../services/bookingService.js";
+import { isAdmin } from "../services/bookingService.js";
+import { handleChatInputCommand } from "./commands.js";
+
+export function registerInteractionHandlers(client, deps) {
+  client.on("interactionCreate", async (interaction) => {
+    try {
+      if (interaction.isChatInputCommand()) {
+        const handled = await handleChatInputCommand(interaction, deps);
+        if (handled) return;
+      }
+
+      if (!(interaction.isButton() || interaction.isStringSelectMenu())) return;
+
+      const { store, audit, archiveService } = deps;
+      const channel = interaction.channel;
+      const member = interaction.member;
+      const memberName = member?.displayName || interaction.user?.username || "Unbekannt";
+      const channelBooking = await store.getBookingByChannelId(channel?.id);
+      const bookingId = channelBooking?.booking_id;
+
+      if (interaction.isButton() && interaction.customId === "cleaning_finish") {
+        if (!bookingId) {
+          await interaction.reply({ content: "❌ Keine Booking-ID gefunden.", ephemeral: true });
+          return;
+        }
+        await interaction.deferUpdate();
+        const cleaning = ensureTasksInChecklist(channelBooking?.cleaning_checklist || defaultCleaningChecklist());
+        if (!allAreasCompleted(cleaning)) {
+          await channel.send("ℹ️ Endreinigung kann erst abgeschlossen werden, wenn alle Bereiche erledigt sind.").catch(() => {});
+          await ensureCleaningOverviewPinned({ channel, bookingId, store });
+          return;
+        }
+        if (!cleaning.meta?.completed) {
+          cleaning.meta.completed = true;
+          cleaning.meta.completed_at = new Date().toISOString();
+          cleaning.meta.completed_by = memberName;
+          const updatedBooking = await store.updateBooking(bookingId, { cleaning_checklist: cleaning });
+          await channel.send(`✅ **Endreinigung abgeschlossen** (von **${memberName}**)`).catch(() => {});
+          await syncBookingChannel({ channel, booking: updatedBooking, client, store });
+        } else {
+          await ensureCleaningOverviewPinned({ channel, bookingId, store });
+        }
+        return;
+      }
+
+      if (interaction.isStringSelectMenu()) {
+        if (interaction.customId === "cleaning_select_area") {
+          const areaKey = interaction.values?.[0];
+          if (!bookingId) return;
+          await interaction.deferUpdate();
+          const cleaning = ensureTasksInChecklist(channelBooking?.cleaning_checklist || defaultCleaningChecklist());
+          const updatedBooking = await store.updateBooking(bookingId, { cleaning_checklist: cleaning });
+          await upsertCleaningDetailMessage({ channel, bookingId, areaKey, store });
+          await syncBookingChannel({ channel, booking: updatedBooking, client, store });
+          return;
+        }
+
+        if (interaction.customId.startsWith("cleaning_pick_task:")) {
+          const areaKey = interaction.customId.split(":")[1];
+          const taskKey = interaction.values?.[0];
+          if (!bookingId) {
+            await interaction.reply({ content: "❌ Keine Booking-ID gefunden.", ephemeral: true });
+            return;
+          }
+          const picked = { ...(channelBooking?.cleaning_picked_task || {}) };
+          picked[areaKey] = taskKey;
+          await interaction.deferUpdate();
+          await store.updateBooking(bookingId, { cleaning_picked_task: picked });
+          return;
+        }
+      }
+
+      if (interaction.isButton() && interaction.customId.startsWith("cleaning_toggle:")) {
+        const [, areaKey, taskKey] = interaction.customId.split(":");
+        if (!bookingId) {
+          await interaction.reply({ content: "❌ Keine Booking-ID gefunden.", ephemeral: true });
+          return;
+        }
+        await interaction.deferUpdate();
+        const cleaning = ensureTasksInChecklist(channelBooking?.cleaning_checklist || defaultCleaningChecklist());
+        const task = cleaning.areas?.[areaKey]?.tasks?.[taskKey];
+        if (!task) return;
+        task.done = !task.done;
+        task.done_by = task.done ? memberName : null;
+        task.done_at = task.done ? new Date().toISOString() : null;
+        cleaning.areas[areaKey].completed = Object.values(cleaning.areas[areaKey].tasks).every((t) => t.done);
+        const updatedBooking = await store.updateBooking(bookingId, { cleaning_checklist: cleaning });
+        await upsertCleaningDetailMessage({ channel, bookingId, areaKey, store });
+        await syncBookingChannel({ channel, booking: updatedBooking, client, store });
+        return;
+      }
+
+      if (interaction.isButton() && interaction.customId.startsWith("cleaning_toggle_picked:")) {
+        const areaKey = interaction.customId.split(":")[1];
+        if (!bookingId) {
+          await interaction.reply({ content: "❌ Keine Booking-ID gefunden.", ephemeral: true });
+          return;
+        }
+        await interaction.deferUpdate();
+        const picked = channelBooking?.cleaning_picked_task?.[areaKey];
+        if (!picked) {
+          await channel.send("ℹ️ Bitte zuerst im Dropdown eine Aufgabe auswählen.").catch(() => {});
+          return;
+        }
+        const cleaning = ensureTasksInChecklist(channelBooking?.cleaning_checklist || defaultCleaningChecklist());
+        const task = cleaning.areas?.[areaKey]?.tasks?.[picked];
+        if (!task) return;
+        task.done = !task.done;
+        task.done_by = task.done ? memberName : null;
+        task.done_at = task.done ? new Date().toISOString() : null;
+        cleaning.areas[areaKey].completed = Object.values(cleaning.areas[areaKey].tasks).every((t) => t.done);
+        const updatedBooking = await store.updateBooking(bookingId, { cleaning_checklist: cleaning });
+        await upsertCleaningDetailMessage({ channel, bookingId, areaKey, store });
+        await syncBookingChannel({ channel, booking: updatedBooking, client, store });
+        return;
+      }
+
+      if (interaction.isButton() && interaction.customId === "archive_now") {
+        if (!isAdmin(interaction.member)) {
+          await interaction.reply({ content: "❌ Nur Admins können manuell archivieren.", ephemeral: true });
+          return;
+        }
+        await interaction.deferUpdate();
+        const booking = await store.getBookingByChannelId(channel.id);
+        if (!booking) {
+          await channel.send("❌ Buchung konnte nicht geladen werden.").catch(() => {});
+          return;
+        }
+        if (!canArchiveBooking(booking)) {
+          await channel.send("❌ Archivierung nicht möglich: Die Endreinigung ist noch nicht abgeschlossen.").catch(() => {});
+          return;
+        }
+        await archiveService.archiveChannelNow({ channel, booking, reason: "Manuell archiviert", actorUserId: interaction.user.id });
+        return;
+      }
+
+      if (interaction.isButton() && interaction.customId === "reactivate_booking") {
+        if (!isAdmin(interaction.member)) {
+          await interaction.reply({ content: "❌ Nur Admins können Buchungen reaktivieren.", ephemeral: true });
+          return;
+        }
+        await interaction.deferUpdate();
+        await channel.permissionOverwrites.edit(channel.guild.roles.everyone, { SendMessages: null }).catch(() => {});
+        await channel.setParent(config.internalCategoryId, { lockPermissions: false });
+        if (channel.name.startsWith("📦-")) {
+          await channel.setName(channel.name.replace(/^📦-/, "")).catch(() => {});
+        }
+        const pins = await channel.messages.fetchPinned();
+        for (const [, msg] of pins) {
+          const hasReactivate = msg.author?.id === client.user.id && msg.components?.some((row) => row.components?.some((c) => c.customId === "reactivate_booking"));
+          if (hasReactivate) await msg.unpin().catch(() => {});
+        }
+        const booking = await store.getBookingByChannelId(channel.id);
+        if (booking?.booking_id) {
+          const updatedBooking = await store.updateBooking(booking.booking_id, { archived: false, reactivated_at: new Date().toISOString() });
+          await syncBookingChannel({ channel, booking: updatedBooking, client, store });
+          await audit.log(`🔓 Reaktiviert: **${booking.booking_id}** in <#${channel.id}> von <@${interaction.user.id}>`);
+        }
+        await channel.send(`🔓 **Buchung reaktiviert** von <@${interaction.user.id}>`);
+        return;
+      }
+
+      if (interaction.isButton() && interaction.customId === "assign_booking") {
+        const existing = channelBooking?.assignee?.display_name || getAssigneeFromTopic(channel.topic);
+        if (existing) {
+          await interaction.reply({ content: `❌ Diese Buchung wird bereits betreut von **${existing}**.`, ephemeral: true });
+          return;
+        }
+        await interaction.deferUpdate();
+        await pinSingleAssignee(channel, memberName, interaction.user.id, client.user.id);
+        await channel.send(`✅ **${memberName}** betreut diese Buchung.`);
+        if (bookingId) {
+          const updatedBooking = await store.updateBooking(bookingId, {
+            assignee: { user_id: interaction.user.id, display_name: memberName, assigned_at: new Date().toISOString() },
+          });
+          await syncBookingChannel({ channel, booking: updatedBooking, client, store });
+        }
+        await audit.log(`👤 Betreuer gesetzt: **${bookingId || "?"}** → ${memberName} (<@${interaction.user.id}>) in <#${channel.id}>`);
+        return;
+      }
+
+      if (interaction.isButton() && interaction.customId === "change_assignee") {
+        if (!canChangeAssignee(member)) {
+          await interaction.reply({ content: "❌ Nur Admins oder berechtigte Staff-Rollen dürfen den Betreuer ändern.", ephemeral: true });
+          return;
+        }
+        await interaction.deferUpdate();
+        await pinSingleAssignee(channel, memberName, interaction.user.id, client.user.id);
+        await channel.send(`🔁 **Betreuer geändert:** ${memberName}`);
+        if (bookingId) {
+          const updatedBooking = await store.updateBooking(bookingId, {
+            assignee: { user_id: interaction.user.id, display_name: memberName, assigned_at: new Date().toISOString(), changed_by_admin: true },
+          });
+          await syncBookingChannel({ channel, booking: updatedBooking, client, store });
+        }
+        await audit.log(`🔁 Betreuer geändert: **${bookingId || "?"}** → ${memberName} (<@${interaction.user.id}>) in <#${channel.id}>`);
+      }
+    } catch (err) {
+      console.error("interactionCreate error:", err);
+      try {
+        if (interaction.isRepliable() && !interaction.replied && !interaction.deferred) {
+          await interaction.reply({ content: "❌ Fehler bei der Aktion.", ephemeral: true });
+        }
+      } catch {}
+    }
+  });
+}

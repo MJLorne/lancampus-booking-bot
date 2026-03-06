@@ -1,19 +1,8 @@
-cat > .gitignore <<'EOF'
-# Secrets
+node_modules
+npm-debug.log
+.git
+.github
 .env
 .env.*
-*.secret
-
-# Docker / Swarm
-docker-stack*.yml
-
-# Runtime data
-data/
-logs/
-
-# Node
-node_modules/
-
-# OS
-.DS_Store
-EOF
+*.log
+data

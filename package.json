@@ -1,13 +1,20 @@
 {
-  "name": "wpbs-discord-bot",
+  "name": "lancampus-booking-bot",
   "version": "1.0.0",
+  "private": true,
   "type": "module",
-  "main": "index.js",
+  "description": "Discord bot for WP Booking System webhooks with cleaning workflow and archive automation",
+  "main": "src/app.js",
   "scripts": {
-    "start": "node index.js"
+    "start": "node src/app.js",
+    "dev": "node --watch src/app.js",
+    "check": "node --check src/app.js"
+  },
+  "engines": {
+    "node": ">=20"
   },
   "dependencies": {
-    "discord.js": "^14.16.0",
-    "express": "^4.19.2"
+    "discord.js": "^14.18.0",
+    "express": "^4.21.2"
   }
 }
