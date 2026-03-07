@@ -25,7 +25,7 @@ export function registerInteractionHandlers(client, deps) {
         if (handled) return;
       }
 
-      if (!(interaction.isButton() || interaction.isStringSelectMenu() || interaction.isUserSelectMenu())) {
+      if (!(interaction.isButton() || interaction.isStringSelectMenu())) {
         return;
       }
 
@@ -73,7 +73,7 @@ export function registerInteractionHandlers(client, deps) {
         return;
       }
 
-      if (interaction.isUserSelectMenu() && interaction.customId === "select_assignee") {
+      if (interaction.isStringSelectMenu() && interaction.customId === "select_assignee") {
         if (!canChangeAssignee(member)) {
           await interaction.reply({
             content: "❌ Nur Admins oder berechtigte Staff-Rollen dürfen den Betreuer ändern.",
@@ -105,7 +105,8 @@ export function registerInteractionHandlers(client, deps) {
         });
 
         await interaction.reply({
-          content: `👤 Betreuer geändert auf **${memberObj.displayName}**`
+          content: `👤 Betreuer geändert auf **${memberObj.displayName}**`,
+          flags: MessageFlags.Ephemeral
         });
 
         await pinSingleAssignee(channel, memberObj.displayName, memberObj.id, client.user.id);
@@ -118,6 +119,10 @@ export function registerInteractionHandlers(client, deps) {
       }
 
       if (interaction.isStringSelectMenu()) {
+        if (interaction.customId === "select_assignee") {
+          return;
+        }
+
         if (interaction.customId === "cleaning_select_area") {
           const areaKey = interaction.values?.[0];
           if (!bookingId) return;

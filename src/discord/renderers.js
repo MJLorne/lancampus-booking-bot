@@ -2,7 +2,7 @@ import {
   ActionRowBuilder,
   ButtonBuilder,
   ButtonStyle,
-  UserSelectMenuBuilder
+  StringSelectMenuBuilder
 } from "discord.js";
 import { config } from "../config.js";
 import { normalizeDateToYMD, buildFullName, buildZeitraum } from "../utils/booking.js";
@@ -58,7 +58,7 @@ export function buildBookingEmbed(booking) {
   };
 }
 
-export function buildBookingActionRows(booking, member) {
+export function buildBookingActionRows(booking, member, assigneeOptions = []) {
   const isStaffOrAdmin =
     member?.roles?.cache?.some((r) => r.name === config.adminRoleName) ||
     member?.roles?.cache?.some((r) => r.name === config.assigneeManagerRoleName);
@@ -78,16 +78,46 @@ export function buildBookingActionRows(booking, member) {
       .setDisabled(!!booking?.archived || !canArchiveBooking(booking))
   );
 
-  const row2 = new ActionRowBuilder().addComponents(
-    new UserSelectMenuBuilder()
-      .setCustomId("select_assignee")
-      .setPlaceholder("Betreuer auswählen (nur Admin/Staff)")
-      .setMinValues(1)
-      .setMaxValues(1)
-      .setDisabled(!!booking?.archived || !isStaffOrAdmin)
-  );
+  const select = new StringSelectMenuBuilder()
+    .setCustomId("select_assignee")
+    .setPlaceholder(
+      assigneeOptions.length > 0
+        ? "Betreuer auswählen (nur Admin/Staff)"
+        : "Keine berechtigten Betreuer gefunden"
+    )
+    .setMinValues(1)
+    .setMaxValues(1)
+    .setDisabled(!!booking?.archived || !isStaffOrAdmin || assigneeOptions.length === 0);
+
+  if (assigneeOptions.length > 0) {
+    select.addOptions(assigneeOptions.slice(0, 25));
+  }
+
+  const row2 = new ActionRowBuilder().addComponents(select);
 
   return [row1, row2];
+}
+
+export function buildAssigneeOptions(guild) {
+  const allowedMembers = guild.members.cache.filter((member) => {
+    if (!member || member.user?.bot) return false;
+
+    return member.roles.cache.some(
+      (role) =>
+        role.name === config.adminRoleName ||
+        role.name === config.assigneeManagerRoleName
+    );
+  });
+
+  return allowedMembers
+    .map((member) => ({
+      label: member.displayName.slice(0, 100),
+      value: member.id,
+      description: member.roles.cache.some((r) => r.name === config.adminRoleName)
+        ? "Admin"
+        : config.assigneeManagerRoleName
+    }))
+    .sort((a, b) => a.label.localeCompare(b.label, "de"));
 }
 
 export function reactivateButtonRow() {
