@@ -4,7 +4,7 @@ import { createDiscordClient } from "./discord/client.js";
 import { createAuditService } from "./services/auditService.js";
 import { createArchiveService } from "./services/archiveService.js";
 import { createReminderService } from "./services/reminderService.js";
-import { registerCommands } from "./discord/commands.js";
+import { registerSlashCommands } from "./discord/commands.js";
 import { registerInteractionHandlers } from "./discord/interactions.js";
 import { createHttpApp } from "./http/routes.js";
 
@@ -33,7 +33,7 @@ function startLoops() {
 client.once("clientReady", async () => {
   console.log(`✅ Bot logged in as ${client.user.tag}`);
   try {
-    await registerCommands(client);
+    await registerSlashCommands(client);
   } catch (e) {
     console.error("❌ registerCommands failed:", e);
   }
