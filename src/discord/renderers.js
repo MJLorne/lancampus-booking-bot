@@ -8,6 +8,20 @@ import { config } from "../config.js";
 import { normalizeDateToYMD, buildFullName, buildZeitraum } from "../utils/booking.js";
 import { canArchiveBooking } from "../services/cleaningService.js";
 
+function getBookingStatus(booking) {
+  if (booking?.archived) return "📦 Archiviert";
+  if (booking?.cleaning_checklist?.meta?.completed) return "✅ Reinigung abgeschlossen";
+  if (booking?.assignee?.user_id) return "🟢 Betreut";
+  return "🟡 Offen";
+}
+
+function getAssigneeDisplay(booking) {
+  if (booking?.assignee?.user_id) {
+    return `<@${booking.assignee.user_id}>`;
+  }
+  return booking?.assignee?.display_name || "—";
+}
+
 export function buildChannelTopic(booking) {
   const parts = [];
 
@@ -41,6 +55,9 @@ export function buildBookingEmbed(booking) {
     end_time: booking?.end_time,
   });
 
+  const status = getBookingStatus(booking);
+  const assignee = getAssigneeDisplay(booking);
+
   return {
     title: "Buchungsdetails",
     fields: [
@@ -51,7 +68,8 @@ export function buildBookingEmbed(booking) {
       { name: "Buchungszeitraum", value: zeitraum, inline: false },
       { name: "Personen", value: booking?.persons ? String(booking.persons) : "—", inline: true },
       { name: "Wäschepaket", value: booking?.laundry_package ? String(booking.laundry_package) : "—", inline: true },
-      { name: "Betreuer", value: booking?.assignee?.display_name || "—", inline: true },
+      { name: "Status", value: status, inline: true },
+      { name: "Betreuer", value: assignee, inline: true },
       { name: "Reinigung", value: booking?.cleaning_checklist?.meta?.completed ? "Abgeschlossen ✅" : "Offen", inline: true },
       { name: "Archivstatus", value: booking?.archived ? "Archiviert 📦" : "Aktiv", inline: true },
     ],
