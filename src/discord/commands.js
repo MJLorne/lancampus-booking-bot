@@ -1,4 +1,5 @@
 import { MessageFlags, PermissionsBitField, REST, Routes, SlashCommandBuilder } from "discord.js";
+import { config } from "../config.js";
 import { syncBookingChannel } from "../services/bookingService.js";
 
 export async function registerSlashCommands(client) {
@@ -11,10 +12,10 @@ export async function registerSlashCommands(client) {
 
   const rest = new REST({ version: "10" }).setToken(client.token);
 
-  await rest.put(
-    Routes.applicationGuildCommands(client.user.id, client.guildId),
-    { body: commands }
-  );
+	await rest.put(
+	  Routes.applicationGuildCommands(client.user.id, config.guildId),
+	  { body: commands }
+	);
 
   console.log("✅ Slash command /refresh registriert");
 }
