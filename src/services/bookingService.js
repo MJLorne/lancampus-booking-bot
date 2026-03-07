@@ -23,10 +23,10 @@ export async function pinSingleAssignee(channel, assignee, setterUserId, clientU
   await msg.pin().catch(() => {});
 }
 
-export async function syncOverviewMessage({ channel, booking, client, store }) {
+export async function syncOverviewMessage({ channel, booking, client, store, member }) {
   if (!channel?.isTextBased() || !booking) return false;
   const embed = buildBookingEmbed(booking);
-  const rows = buildBookingActionRows(booking);
+  const rows = buildBookingActionRows(booking, member);
 
   if (booking.overview_message_id) {
     const msg = await channel.messages.fetch(booking.overview_message_id).catch(() => null);
@@ -58,7 +58,7 @@ export async function ensureCleaningOverviewPinned({ channel, bookingId, store }
     const msg = await channel.messages.fetch(booking.cleaning_overview_message_id).catch(() => null);
     if (msg) {
       await msg.edit({ content: text, components }).catch(() => {});
-      const pins = await chchannel.messages.fetchPins();
+      const pins = await channel.messages.fetchPins();
       if (![...pins.values()].some((m) => m.id === msg.id)) await msg.pin().catch(() => {});
       return msg;
     }
@@ -106,10 +106,10 @@ export async function upsertCleaningDetailMessage({ channel, bookingId, areaKey,
   return msg;
 }
 
-export async function syncBookingChannel({ channel, booking, client, store }) {
+export async function syncBookingChannel({ channel, booking, client, store, member }){
   if (!channel?.isTextBased() || !booking) return false;
   await channel.setTopic(buildChannelTopic(booking)).catch((err) => console.error("setTopic failed:", err?.message || err));
-  const edited = await syncOverviewMessage({ channel, booking, client, store });
+  const edited = await syncOverviewMessage({ channel, booking, client, store, member });
   await ensureCleaningOverviewPinned({ channel, bookingId: String(booking.booking_id), store });
   await ensureCleaningSelectMessage({ channel, bookingId: String(booking.booking_id), store });
   return edited;
@@ -151,7 +151,7 @@ export async function createOrUpdateBookingFromWebhook({ body, client, store, au
         channel_id: existing.channel_id,
         channel_name: existing.channel_name || existingChannel.name || null,
       });
-      await syncBookingChannel({ channel: existingChannel, booking: updatedBooking, client, store });
+      await syncBookingChannel({ channel: existingChannel, booking: updatedBooking, client, store, member: null });
       return { channelId: existing.channel_id, reused: true, updated: true };
     }
   }
@@ -192,13 +192,13 @@ export async function createOrUpdateBookingFromWebhook({ body, client, store, au
   const overviewMsg = await channel.send({
     content: "📥 Neue Buchung eingegangen",
     embeds: [buildBookingEmbed(initialBooking)],
-    components: buildBookingActionRows(initialBooking),
+    components: buildBookingActionRows(initialBooking, null),
   });
 
   const savedBooking = await store.upsertBooking({ ...initialBooking, channel_id: channel.id, channel_name: channel.name, overview_message_id: overviewMsg.id });
   await ensureCleaningOverviewPinned({ channel, bookingId: String(bookingId), store });
   await ensureCleaningSelectMessage({ channel, bookingId: String(bookingId), store });
-  await syncBookingChannel({ channel, booking: savedBooking, client, store });
+  await syncBookingChannel({ channel, booking: savedBooking, client, store, member: null });
   await audit.log(`📥 Neue Buchung: **${bookingId}** → <#${channel.id}> (${fullName || "—"})`);
   return { channelId: channel.id, reused: false, updated: false };
 }
