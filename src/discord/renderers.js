@@ -1,9 +1,16 @@
-import { ActionRowBuilder, ButtonBuilder, ButtonStyle, UserSelectMenuBuilder } from "discord.js";
+import {
+  ActionRowBuilder,
+  ButtonBuilder,
+  ButtonStyle,
+  UserSelectMenuBuilder
+} from "discord.js";
+import { config } from "../config.js";
 import { normalizeDateToYMD, buildFullName, buildZeitraum } from "../utils/booking.js";
 import { canArchiveBooking } from "../services/cleaningService.js";
 
 export function buildChannelTopic(booking) {
   const parts = [];
+
   parts.push(buildZeitraum({
     start_date: normalizeDateToYMD(booking?.start_date),
     end_date: normalizeDateToYMD(booking?.end_date),
@@ -51,7 +58,10 @@ export function buildBookingEmbed(booking) {
   };
 }
 
-export function buildBookingActionRows(booking) {
+export function buildBookingActionRows(booking, member) {
+  const isStaffOrAdmin =
+    member?.roles?.cache?.some((r) => r.name === config.adminRoleName) ||
+    member?.roles?.cache?.some((r) => r.name === config.assigneeManagerRoleName);
 
   const row1 = new ActionRowBuilder().addComponents(
     new ButtonBuilder()
@@ -71,10 +81,10 @@ export function buildBookingActionRows(booking) {
   const row2 = new ActionRowBuilder().addComponents(
     new UserSelectMenuBuilder()
       .setCustomId("select_assignee")
-      .setPlaceholder("Betreuer auswählen")
+      .setPlaceholder("Betreuer auswählen (nur Admin/Staff)")
       .setMinValues(1)
       .setMaxValues(1)
-      .setDisabled(!!booking?.archived)
+      .setDisabled(!!booking?.archived || !isStaffOrAdmin)
   );
 
   return [row1, row2];
@@ -82,6 +92,10 @@ export function buildBookingActionRows(booking) {
 
 export function reactivateButtonRow() {
   return new ActionRowBuilder().addComponents(
-    new ButtonBuilder().setCustomId("reactivate_booking").setLabel("Reaktivieren").setEmoji("🔓").setStyle(ButtonStyle.Success)
+    new ButtonBuilder()
+      .setCustomId("reactivate_booking")
+      .setLabel("Reaktivieren")
+      .setEmoji("🔓")
+      .setStyle(ButtonStyle.Success)
   );
 }
