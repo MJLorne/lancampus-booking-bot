@@ -38,8 +38,17 @@ export async function handleChatInputCommand(interaction, deps) {
     }
 
     await interaction.deferReply({ flags: MessageFlags.Ephemeral });
-    await syncBookingChannel({ channel, booking, client, store, member: interaction.member });
-    await interaction.editReply("✅ Buchungskanal wurde aktualisiert.");
+
+    try {
+      await syncBookingChannel({ channel, booking, client, store, member: interaction.member });
+      await interaction.editReply({ content: "✅ Buchungskanal wurde aktualisiert." });
+    } catch (err) {
+      console.error("refresh failed:", err);
+      await interaction.editReply({
+        content: `❌ /refresh fehlgeschlagen: ${err?.message || "Unbekannter Fehler"}`
+      }).catch(() => {});
+    }
+
     return true;
   }
 
