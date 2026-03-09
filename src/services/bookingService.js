@@ -17,6 +17,14 @@ import {
 } from "./cleaningService.js";
 import { normalizeDateToYMD, buildFullName, buildZeitraum, slugify } from "../utils/booking.js";
 
+function normalizePins(pins) {
+  if (!pins) return [];
+  if (Array.isArray(pins)) return pins;
+  if (typeof pins.values === "function") return Array.from(pins.values());
+  if (Symbol.iterator in Object(pins)) return Array.from(pins);
+  return [];
+}
+
 export function canChangeAssignee(member) {
   return !!member?.roles?.cache?.some(
     (r) => r.name === config.adminRoleName || r.name === config.assigneeManagerRoleName
@@ -28,12 +36,15 @@ export function isAdmin(member) {
 }
 
 export async function pinSingleAssignee(channel, assignee, setterUserId, clientUserId) {
-  const pins = await channel.messages.fetchPins();
-  for (const [, msg] of pins) {
+  const pinsRaw = await channel.messages.fetchPins().catch(() => []);
+  const pins = normalizePins(pinsRaw);
+
+  for (const msg of pins) {
     if (msg.author?.id === clientUserId && msg.content?.startsWith("📌 **Betreuer:**")) {
       await msg.unpin().catch(() => {});
     }
   }
+
   const msg = await channel.send(`📌 **Betreuer:** ${assignee}\n(gesetzt von <@${setterUserId}>)`);
   await msg.pin().catch(() => {});
 }
@@ -94,8 +105,12 @@ export async function ensureCleaningOverviewPinned({ channel, bookingId, store }
     const msg = await channel.messages.fetch(booking.cleaning_overview_message_id).catch(() => null);
     if (msg) {
       await msg.edit({ content: text, components }).catch(() => {});
-      const pins = await channel.messages.fetchPins();
-      if (![...pins.values()].some((m) => m.id === msg.id)) await msg.pin().catch(() => {});
+      const pinsRaw = await channel.messages.fetchPins().catch(() => []);
+      const pins = normalizePins(pinsRaw);
+      
+      if (!pins.some((m) => m.id === msg.id)) {
+        await msg.pin().catch(() => {});
+      }
       return msg;
     }
   }
