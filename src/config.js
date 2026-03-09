@@ -16,13 +16,15 @@ export const config = {
 
   reminderDays: env.REMINDER_DAYS || "7,1",
   reminderCheckMinutes: Math.max(5, Number(env.REMINDER_CHECK_MINUTES) || 60),
-
   archiveAfterDays: Math.max(0, Number(env.ARCHIVE_AFTER_DAYS) || 7),
   archiveCategoryId: env.ARCHIVE_CATEGORY_ID || "",
   archiveLockChannel: String(env.ARCHIVE_LOCK_CHANNEL || "true").toLowerCase() === "true",
   sweepMinutes: Math.max(5, Number(env.SWEEP_MINUTES) || 60),
 
   dataDir: env.DATA_DIR || "/data",
+  storageDriver: (env.STORAGE_DRIVER || "json").toLowerCase(),
+  databaseUrl: env.DATABASE_URL || "",
+
   smallAreaTasksMax: 5,
 };
 
@@ -34,5 +36,9 @@ export function validateConfig() {
 
   if (missing.length) {
     throw new Error(`Missing env vars: ${missing.join(", ")}`);
+  }
+
+  if (config.storageDriver === "postgres" && !config.databaseUrl) {
+    throw new Error("Missing env vars: DATABASE_URL (required for STORAGE_DRIVER=postgres)");
   }
 }

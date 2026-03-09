@@ -1,0 +1,73 @@
+version: "3.9"
+
+services:
+  bot:
+    image: ghcr.io/mjlorne/lancampus-booking-bot:test
+    environment:
+      DISCORD_TOKEN: ""
+      GUILD_ID: ""
+      INTERNAL_CATEGORY_ID: ""
+      WP_SHARED_SECRET: ""
+      PORT: "3000"
+      TZ: "Europe/Berlin"
+      REMINDER_DAYS: "7,1"
+      REMINDER_CHECK_MINUTES: "60"
+      ARCHIVE_AFTER_DAYS: "30"
+      ARCHIVE_CATEGORY_ID: ""
+      ARCHIVE_LOCK_CHANNEL: "true"
+      AUDIT_CHANNEL_ID: ""
+      ASSIGNEE_MANAGER_ROLE_NAME: ""
+      DATA_DIR: "/data"
+      STORAGE_DRIVER: postgres
+      DATABASE_URL: postgres://bookingbot:PASS@postgres:5432/bookingbot
+    volumes:
+      - /DockerData/lancampusbottest/data:/data
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:3000/healthz || exit 1"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 180s
+    deploy:
+      replicas: 1
+      restart_policy:
+        condition: on-failure
+      update_config:
+        order: start-first
+        failure_action: rollback
+        delay: 5s
+    networks:
+      - NPM-SupportNetz
+      - bookingbotinternal
+
+  postgres:
+    image: postgres:18
+    environment:
+      POSTGRES_DB: bookingbot
+      POSTGRES_USER: bookingbot
+      POSTGRES_PASSWORD: ""
+      TZ: "Europe/Berlin"
+    volumes:
+      - postgres_data:/var/lib/postgresql
+      - /DockerData/lancampusbottest/postgres/init:/docker-entrypoint-initdb.d:ro
+    networks:
+      - bookingbotinternal
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U bookingbot -d bookingbot"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 20s
+    deploy:
+      replicas: 1
+      restart_policy:
+        condition: on-failure
+
+networks:
+  NPM-SupportNetz:
+    external: true
+  bookingbotinternal:
+    external: false
+
+volumes:
+  postgres_data:

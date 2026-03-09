@@ -1,5 +1,5 @@
 import { validateConfig, config } from "./config.js";
-import * as store from "./storage/bookingStore.js";
+import { getStore } from "./storage/index.js";
 import { createDiscordClient } from "./discord/client.js";
 import { createAuditService } from "./services/auditService.js";
 import { createArchiveService } from "./services/archiveService.js";
@@ -9,6 +9,7 @@ import { registerInteractionHandlers } from "./discord/interactions.js";
 import { createHttpApp } from "./http/routes.js";
 
 validateConfig();
+const store = getStore();
 
 const client = createDiscordClient();
 const audit = createAuditService({ client, config });
