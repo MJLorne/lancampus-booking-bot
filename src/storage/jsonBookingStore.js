@@ -54,7 +54,9 @@ export async function upsertBooking(entry) {
       created_at: idx >= 0 ? bookings[idx].created_at : now,
       reminders_sent: idx >= 0 ? (bookings[idx].reminders_sent || {}) : (entry.reminders_sent || {}),
       archived: idx >= 0 ? (bookings[idx].archived ?? entry.archived ?? false) : (entry.archived ?? false),
-      cleaning_checklist: idx >= 0 ? (bookings[idx].cleaning_checklist || entry.cleaning_checklist) : entry.cleaning_checklist,
+      cleaning_checklist: idx >= 0
+        ? (bookings[idx].cleaning_checklist || entry.cleaning_checklist)
+        : entry.cleaning_checklist,
     };
 
     if (idx >= 0) bookings[idx] = merged;
@@ -70,7 +72,13 @@ export async function updateBooking(bookingId, patch) {
     const bookings = await loadBookings();
     const idx = bookings.findIndex((b) => String(b.booking_id) === String(bookingId));
     if (idx < 0) return null;
-    bookings[idx] = { ...bookings[idx], ...patch, updated_at: new Date().toISOString() };
+
+    bookings[idx] = {
+      ...bookings[idx],
+      ...patch,
+      updated_at: new Date().toISOString(),
+    };
+
     await saveBookings(bookings);
     return bookings[idx];
   });
@@ -81,9 +89,16 @@ export async function markReminderSent(bookingId, daysBefore) {
     const bookings = await loadBookings();
     const idx = bookings.findIndex((b) => String(b.booking_id) === String(bookingId));
     if (idx < 0) return;
+
     const reminders = { ...(bookings[idx].reminders_sent || {}) };
     reminders[String(daysBefore)] = new Date().toISOString();
-    bookings[idx] = { ...bookings[idx], reminders_sent: reminders, updated_at: new Date().toISOString() };
+
+    bookings[idx] = {
+      ...bookings[idx],
+      reminders_sent: reminders,
+      updated_at: new Date().toISOString(),
+    };
+
     await saveBookings(bookings);
   });
 }

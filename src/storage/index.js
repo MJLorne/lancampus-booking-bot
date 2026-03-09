@@ -1,12 +1,7 @@
 import * as jsonStore from "./jsonBookingStore.js";
 import * as postgresStore from "./postgresBookingStore.js";
-
-const driver = process.env.STORAGE_DRIVER || "json";
+import { config } from "../config.js";
 
 export function getStore() {
-  if (driver === "postgres") {
-    return postgresStore;
-  }
-
-  return jsonStore;
+  return config.storageDriver === "postgres" ? postgresStore : jsonStore;
 }
