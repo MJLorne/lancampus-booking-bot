@@ -283,14 +283,22 @@ export function registerInteractionHandlers(client, deps) {
           await channel.setName(channel.name.replace(/^📦-/, "")).catch(() => {});
         }
 
-        const pins = await channel.messages.fetchPins();
-        for (const [, msg] of pins) {
+        const pinsRaw = await channel.messages.fetchPins().catch(() => []);
+        const pins = Array.isArray(pinsRaw)
+          ? pinsRaw
+          : typeof pinsRaw?.values === "function"
+            ? Array.from(pinsRaw.values())
+            : Symbol.iterator in Object(pinsRaw)
+              ? Array.from(pinsRaw)
+              : [];
+        
+        for (const msg of pins) {
           const hasReactivate =
             msg.author?.id === client.user.id &&
             msg.components?.some((row) =>
               row.components?.some((c) => c.customId === "reactivate_booking")
             );
-
+        
           if (hasReactivate) {
             await msg.unpin().catch(() => {});
           }
