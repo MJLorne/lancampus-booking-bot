@@ -2,8 +2,11 @@ name: Build and Push Docker Image
 
 on:
   push:
-    branches: [main]
-    tags: ["v*"]
+    branches:
+      - main
+      - develop
+    tags:
+      - "v*"
   workflow_dispatch:
 
 env:
@@ -41,6 +44,7 @@ jobs:
           images: ${{ env.IMAGE_NAME }}
           tags: |
             type=raw,value=latest,enable={{is_default_branch}}
+            type=raw,value=test,enable=${{ github.ref == 'refs/heads/develop' }}
             type=sha,format=short,prefix=sha-
             type=ref,event=tag
 
