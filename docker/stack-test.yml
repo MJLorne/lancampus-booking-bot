@@ -18,6 +18,8 @@ services:
       AUDIT_CHANNEL_ID: ""
       ASSIGNEE_MANAGER_ROLE_NAME: ""
       DATA_DIR: "/data"
+      STORAGE_DRIVER: postgres
+      DATABASE_URL: postgres://bookingbot:PASS@postgres:5432/bookingbot
     volumes:
       - /DockerData/lancampusbottest/data:/data
     healthcheck:
@@ -43,11 +45,11 @@ services:
     environment:
       POSTGRES_DB: bookingbot
       POSTGRES_USER: bookingbot
-      POSTGRES_PASSWORD: "CHANGE_ME"
+      POSTGRES_PASSWORD: ""
       TZ: "Europe/Berlin"
     volumes:
       - postgres_data:/var/lib/postgresql
-      - ./docker/postgres/init:/docker-entrypoint-initdb.d:ro
+      - /DockerData/lancampusbottest/postgres/init:/docker-entrypoint-initdb.d:ro
     networks:
       - bookingbotinternal
     healthcheck:
