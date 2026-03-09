@@ -20,6 +20,7 @@ CREATE TABLE IF NOT EXISTS bookings (
 
   assignee JSONB NOT NULL DEFAULT 'null'::jsonb,
   cleaning_checklist JSONB NOT NULL DEFAULT '{}'::jsonb,
+  cleaning_picked_task JSONB NOT NULL DEFAULT '{}'::jsonb,
   reminders_sent JSONB NOT NULL DEFAULT '{}'::jsonb,
 
   archived BOOLEAN NOT NULL DEFAULT FALSE,
