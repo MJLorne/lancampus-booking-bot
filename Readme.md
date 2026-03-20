@@ -275,3 +275,7 @@ Der Bot kann parallel in einem Testsystem betrieben werden:
 # Lizenz
 
 Private Project -- LanCampus
+
+## Workflow-Check
+
+Diese minimale Änderung soll den `dev`-Workflow auf GitHub triggern, damit wir sehen, ob die Builds und das Package wie erwartet erzeugt werden.
