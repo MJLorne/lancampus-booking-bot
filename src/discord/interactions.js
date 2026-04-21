@@ -138,9 +138,8 @@ export function registerInteractionHandlers(client, deps) {
           return;
         }
 
-        if (interaction.customId.startsWith("cleaning_pick_task:")) {
+        if (interaction.customId.startsWith("cleaning_pick_tasks:")) {
           const areaKey = interaction.customId.split(":")[1];
-          const taskKey = interaction.values?.[0];
 
           if (!bookingId) {
             await interaction.reply({
@@ -151,7 +150,7 @@ export function registerInteractionHandlers(client, deps) {
           }
 
           const picked = { ...(channelBooking?.cleaning_picked_task || {}) };
-          picked[areaKey] = taskKey;
+          picked[areaKey] = interaction.values;
 
           await interaction.deferUpdate();
           await store.updateBooking(bookingId, { cleaning_picked_task: picked });
@@ -159,11 +158,26 @@ export function registerInteractionHandlers(client, deps) {
         }
       }
 
-      if (interaction.isButton() && interaction.customId.startsWith("cleaning_toggle:")) {
-        const [, areaKey, taskKey] = interaction.customId.split(":");
+      if (interaction.isButton() && (
+        interaction.customId.startsWith("cleaning_mark_done:") ||
+        interaction.customId.startsWith("cleaning_mark_undone:")
+      )) {
+        const [action, areaKey] = interaction.customId.split(":");
+        const markDone = action === "cleaning_mark_done";
 
         if (!bookingId) {
           await interaction.reply({ content: "❌ Keine Booking-ID gefunden.", flags: MessageFlags.Ephemeral });
+          return;
+        }
+
+        const pickedRaw = channelBooking?.cleaning_picked_task?.[areaKey];
+        const pickedKeys = Array.isArray(pickedRaw) ? pickedRaw : pickedRaw ? [pickedRaw] : [];
+
+        if (!pickedKeys.length) {
+          await interaction.reply({
+            content: "ℹ️ Bitte zuerst Aufgaben im Dropdown auswählen.",
+            flags: MessageFlags.Ephemeral
+          });
           return;
         }
 
@@ -172,54 +186,17 @@ export function registerInteractionHandlers(client, deps) {
         const cleaning = ensureTasksInChecklist(
           channelBooking?.cleaning_checklist || defaultCleaningChecklist()
         );
-        const task = cleaning.areas?.[areaKey]?.tasks?.[taskKey];
-        if (!task) return;
 
-        task.done = !task.done;
-        task.done_by = task.done ? memberName : null;
-        task.done_at = task.done ? new Date().toISOString() : null;
+        for (const taskKey of pickedKeys) {
+          const task = cleaning.areas?.[areaKey]?.tasks?.[taskKey];
+          if (!task) continue;
+          task.done = markDone;
+          task.done_by = markDone ? memberName : null;
+          task.done_at = markDone ? new Date().toISOString() : null;
+        }
         cleaning.areas[areaKey].completed = Object.values(cleaning.areas[areaKey].tasks).every((t) => t.done);
 
-        const updatedBooking = await store.updateBooking(bookingId, {
-          cleaning_checklist: cleaning
-        });
-
-        await upsertCleaningDetailMessage({ channel, bookingId, areaKey, store });
-        await syncBookingChannel({ channel, booking: updatedBooking, client, store, member });
-        return;
-      }
-
-      if (interaction.isButton() && interaction.customId.startsWith("cleaning_toggle_picked:")) {
-        const areaKey = interaction.customId.split(":")[1];
-
-        if (!bookingId) {
-          await interaction.reply({ content: "❌ Keine Booking-ID gefunden.", flags: MessageFlags.Ephemeral });
-          return;
-        }
-
-        await interaction.deferUpdate();
-
-        const picked = channelBooking?.cleaning_picked_task?.[areaKey];
-        if (!picked) {
-          await channel.send("ℹ️ Bitte zuerst im Dropdown eine Aufgabe auswählen.").catch(() => {});
-          return;
-        }
-
-        const cleaning = ensureTasksInChecklist(
-          channelBooking?.cleaning_checklist || defaultCleaningChecklist()
-        );
-        const task = cleaning.areas?.[areaKey]?.tasks?.[picked];
-        if (!task) return;
-
-        task.done = !task.done;
-        task.done_by = task.done ? memberName : null;
-        task.done_at = task.done ? new Date().toISOString() : null;
-        cleaning.areas[areaKey].completed = Object.values(cleaning.areas[areaKey].tasks).every((t) => t.done);
-
-        const updatedBooking = await store.updateBooking(bookingId, {
-          cleaning_checklist: cleaning
-        });
-
+        const updatedBooking = await store.updateBooking(bookingId, { cleaning_checklist: cleaning });
         await upsertCleaningDetailMessage({ channel, bookingId, areaKey, store });
         await syncBookingChannel({ channel, booking: updatedBooking, client, store, member });
         return;

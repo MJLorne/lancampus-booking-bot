@@ -25,7 +25,6 @@ export const config = {
   storageDriver: (env.STORAGE_DRIVER || "json").toLowerCase(),
   databaseUrl: env.DATABASE_URL || "",
 
-  smallAreaTasksMax: 5,
 };
 
 export const bookingsFile = path.join(config.dataDir, "bookings.json");
