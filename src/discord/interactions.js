@@ -282,6 +282,9 @@ export function registerInteractionHandlers(client, deps) {
             msg.components?.some((row) =>
               row.components?.some((c) => c.customId === "reactivate_booking")
             );
+          const hasBetreuer =
+            msg.author?.id === client.user.id &&
+            msg.content?.startsWith("📌 **Betreuer:**");
 
           if (hasReactivate) {
             await msg.unpin().catch(() => {});
@@ -289,6 +292,8 @@ export function registerInteractionHandlers(client, deps) {
               content: "🔓 **Diese Buchung wurde reaktiviert.**",
               components: []
             }).catch(() => {});
+          } else if (hasBetreuer) {
+            await msg.unpin().catch(() => {});
           }
         }
 
