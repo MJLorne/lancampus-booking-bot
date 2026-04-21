@@ -1,6 +1,17 @@
+import { timingSafeEqual } from "crypto";
 import express from "express";
 import { config } from "../config.js";
 import { createOrUpdateBookingFromWebhook } from "../services/bookingService.js";
+
+function verifySecret(incoming) {
+  try {
+    const a = Buffer.from(incoming || "");
+    const b = Buffer.from(config.wpSharedSecret);
+    return a.length === b.length && timingSafeEqual(a, b);
+  } catch {
+    return false;
+  }
+}
 
 export function createHttpApp(deps) {
   const app = express();
@@ -10,7 +21,7 @@ export function createHttpApp(deps) {
 
   app.post("/wpbs/new-booking", async (req, res) => {
     try {
-      if (req.header("x-shared-secret") !== config.wpSharedSecret) {
+      if (!verifySecret(req.header("x-shared-secret"))) {
         return res.status(401).send("unauthorized");
       }
       if (!deps.client.isReady()) {

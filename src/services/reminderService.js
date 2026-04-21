@@ -27,7 +27,7 @@ export function createReminderService({ client, store, audit }) {
 
           for (const daysBefore of daysList) {
             const reminderUtcMs = startUtcMs - daysBefore * 24 * 60 * 60 * 1000;
-            if (reminderUtcMs !== todayUtcMs) continue;
+            if (reminderUtcMs > todayUtcMs) continue;
             if (remindersSent[String(daysBefore)]) continue;
 
             const channel = await client.channels.fetch(booking.channel_id).catch(() => null);

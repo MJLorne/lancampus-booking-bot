@@ -297,8 +297,6 @@ export async function createOrUpdateBookingFromWebhook({ body, client, store, au
     overview_message_id: overviewMsg.id
   });
 
-  await ensureCleaningOverviewPinned({ channel, bookingId: String(bookingId), store });
-  await ensureCleaningSelectMessage({ channel, bookingId: String(bookingId), store });
   await syncBookingChannel({ channel, booking: savedBooking, client, store, member: null });
 
   await audit.log(`📥 Neue Buchung: **${bookingId}** → <#${channel.id}> (${fullName || "—"})`);

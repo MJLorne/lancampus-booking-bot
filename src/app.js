@@ -60,3 +60,13 @@ app.listen(config.port, "0.0.0.0", () => {
 });
 
 client.login(config.discordToken);
+
+async function shutdown() {
+  console.log("🛑 Shutting down...");
+  client.destroy();
+  await store.closeStore?.().catch(() => {});
+  process.exit(0);
+}
+
+process.once("SIGTERM", shutdown);
+process.once("SIGINT", shutdown);

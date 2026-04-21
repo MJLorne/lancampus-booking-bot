@@ -24,6 +24,9 @@ CREATE TABLE IF NOT EXISTS bookings (
   reminders_sent JSONB NOT NULL DEFAULT '{}'::jsonb,
 
   archived BOOLEAN NOT NULL DEFAULT FALSE,
+  archived_at TIMESTAMPTZ,
+  archived_reason TEXT,
+  reactivated_at TIMESTAMPTZ,
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
