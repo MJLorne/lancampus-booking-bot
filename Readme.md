@@ -32,29 +32,33 @@ Beispiel:
 
 Der Channel enthält:
 
--   Buchungsdetails
+-   Buchungsdetails (Embed)
 -   Betreuer-System
 -   Reinigungscheckliste
 -   Archiv-Buttons
+
+Wird der gleiche Webhook erneut gesendet (z.B. bei Buchungsänderung),
+wird der bestehende Channel aktualisiert statt ein neuer erstellt.
 
 ------------------------------------------------------------------------
 
 # Betreuer System
 
-Buttons im Channel:
+Button im Channel:
 
     Ich betreue diese Buchung
 
-oder Admin Dropdown:
+oder Admin-Dropdown:
 
     Betreuer auswählen
 
 Nur folgende Rollen dürfen Betreuer ändern:
 
--   Admin
--   LanCampus-Staff
+-   Admin (konfigurierbar via `ADMIN_ROLE_NAME`)
+-   LanCampus-Staff (konfigurierbar via `ASSIGNEE_MANAGER_ROLE_NAME`)
 
-Der aktuelle Betreuer wird im Channel Topic gespeichert.
+Der aktuelle Betreuer wird im Channel-Topic und als gepinnte Nachricht
+gespeichert.
 
 ------------------------------------------------------------------------
 
@@ -66,9 +70,11 @@ Workflow:
 
     Bereich auswählen
     ↓
-    Aufgabe auswählen
+    Mehrere Aufgaben gleichzeitig auswählen (Multi-Select)
     ↓
-    Aufgabe erledigen
+    "Als erledigt markieren" oder "Als offen markieren"
+    ↓
+    Endreinigung abschließen (wenn alle Bereiche fertig)
 
 Bereiche:
 
@@ -81,9 +87,8 @@ Bereiche:
 -   Außenbereich
 -   Sonstiges
 
-Wenn alle Aufgaben erledigt sind:
-
-    Endreinigung abschließen
+Wenn alle Bereiche abgeschlossen sind, wird der Button
+„Endreinigung abschließen" aktiv. Erst danach kann archiviert werden.
 
 ------------------------------------------------------------------------
 
@@ -93,13 +98,35 @@ Ein Channel wird archiviert wenn:
 
     cleaning.meta.completed === true
 
-oder manuell durch Admin.
+und der Abreisezeitpunkt + `ARCHIVE_AFTER_DAYS` erreicht ist,
+oder manuell durch einen Admin.
 
 Archivierung:
 
--   Channel wird verschoben
--   Channel wird geschlossen
--   Channel wird markiert
+-   Channel wird in die Archiv-Kategorie verschoben
+-   Channel wird für normale User gesperrt (konfigurierbar)
+-   Channel wird mit `📦-` Präfix markiert
+-   Reaktivierung durch Admin jederzeit möglich
+
+------------------------------------------------------------------------
+
+# Reminder-System
+
+Vor der Anreise werden automatisch Reminder an den zugewiesenen
+Betreuer gesendet.
+
+Konfigurierbar via `REMINDER_DAYS` (z.B. `7,1` für 7 und 1 Tag vorher).
+
+Verpasste Reminder (z.B. bei Bot-Downtime) werden beim nächsten Sweep
+nachgeholt, solange die Anreise noch in der Zukunft liegt.
+
+------------------------------------------------------------------------
+
+# Slash Commands
+
+| Command    | Berechtigung       | Funktion                                  |
+|------------|--------------------|-------------------------------------------|
+| `/refresh` | Manage Channels    | Embed, Topic und Reinigungsübersicht aktualisieren |
 
 ------------------------------------------------------------------------
 
@@ -107,7 +134,7 @@ Archivierung:
 
     WordPress
        │
-       │ Webhook
+       │ Webhook (POST /wpbs/new-booking)
        ▼
     Booking Bot (Node.js)
        │
@@ -121,8 +148,8 @@ Komponenten:
   --------------------- ----------------------------
   Discord Bot           Node.js Bot mit discord.js
   PostgreSQL            Persistente Speicherung
-  Docker Swarm          Deployment
-  GitHub Actions        CI/CD
+  Docker Swarm          Deployment (Raspberry Pi ARM64)
+  GitHub Actions        CI/CD (multi-arch build mit Registry-Cache)
   Nginx Proxy Manager   Reverse Proxy
 
 ------------------------------------------------------------------------
@@ -131,7 +158,7 @@ Komponenten:
 
   Technologie      Version
   ---------------- ---------
-  Node.js          \>=20
+  Node.js          >=20
   discord.js       v14
   PostgreSQL       18
   Docker           Swarm
@@ -142,33 +169,43 @@ Komponenten:
 # Projektstruktur
 
     src/
+      app.js
+      config.js
 
-    app.js
-    config.js
+      discord/
+        client.js
+        commands.js
+        interactions.js
+        renderers.js
 
-    discord/
-    client.js
-    commands.js
-    interactions.js
-    renderers.js
+      services/
+        bookingService.js
+        cleaningService.js
+        archiveService.js
+        reminderService.js
+        auditService.js
 
-    services/
-    bookingService.js
-    cleaningService.js
-    archiveService.js
-    reminderService.js
+      storage/
+        jsonBookingStore.js
+        postgresBookingStore.js
+        index.js
 
-    storage/
-    jsonBookingStore.js
-    postgresBookingStore.js
-    index.js
+      http/
+        routes.js
+
+      utils/
+        booking.js
+        date.js
 
     docker/
-    stack-test.yml
-    postgres/init/001-bookings.sql
+      stack-test.yml
+      postgres/init/
+        001-bookings.sql
+        002-indexes.sql
+        003-migrations.sql
 
     scripts/
-    migrate-json-to-postgres.js
+      migrate-json-to-postgres.js
 
 ------------------------------------------------------------------------
 
@@ -176,10 +213,9 @@ Komponenten:
 
 ## Voraussetzungen
 
--   Docker
--   Docker Swarm
--   PostgreSQL
--   Discord Bot Token
+-   Docker mit Swarm-Modus
+-   PostgreSQL 18
+-   Discord Bot Token (mit `Guilds` und `GuildMembers` Intent)
 
 ------------------------------------------------------------------------
 
@@ -187,21 +223,32 @@ Komponenten:
 
 Docker Stack deployen:
 
-    docker stack deploy -c stack.yml lancampus-booking-bot
+    docker stack deploy -c docker/stack-test.yml lancampus-booking-bot
 
 ------------------------------------------------------------------------
 
 # Environment Variablen
 
-  Variable               Beschreibung
-  ---------------------- --------------------------
-  DISCORD_TOKEN          Discord Bot Token
-  GUILD_ID               Discord Server ID
-  INTERNAL_CATEGORY_ID   Kategorie für Buchungen
-  ARCHIVE_CATEGORY_ID    Archiv Kategorie
-  WP_SHARED_SECRET       WordPress Webhook Secret
-  STORAGE_DRIVER         json oder postgres
-  DATABASE_URL           PostgreSQL Verbindung
+  Variable                    Beschreibung                              Standard
+  --------------------------- ----------------------------------------- ----------
+  DISCORD_TOKEN               Discord Bot Token                         –
+  GUILD_ID                    Discord Server ID                         –
+  INTERNAL_CATEGORY_ID        Kategorie für aktive Buchungen            –
+  WP_SHARED_SECRET            WordPress Webhook Secret                  –
+  ARCHIVE_CATEGORY_ID         Kategorie für archivierte Buchungen       –
+  AUDIT_CHANNEL_ID            Channel für Audit-Logs                    (leer)
+  ADMIN_ROLE_NAME             Name der Admin-Rolle                      Admin
+  ASSIGNEE_MANAGER_ROLE_NAME  Name der Staff-Rolle                      LanCampus-Staff
+  STORAGE_DRIVER              `json` oder `postgres`                    json
+  DATABASE_URL                PostgreSQL Verbindungs-URL                –
+  REMINDER_DAYS               Komma-getrennte Tage vor Anreise          7,1
+  REMINDER_CHECK_MINUTES      Interval des Reminder-Sweeps (min)        60
+  ARCHIVE_AFTER_DAYS          Tage nach Abreise bis Archivierung        7
+  ARCHIVE_LOCK_CHANNEL        Channel nach Archivierung sperren         true
+  SWEEP_MINUTES               Interval des Archiv-Sweeps (min)          60
+  PORT                        HTTP Port                                  3000
+  TZ                          Zeitzone                                  Europe/Berlin
+  DATA_DIR                    Datenpfad für JSON-Storage                /data
 
 Beispiel:
 
@@ -209,13 +256,19 @@ Beispiel:
 
 ------------------------------------------------------------------------
 
+# Datenbank-Migration (bestehende Installation)
+
+Bei Updates müssen neue Spalten manuell migriert werden:
+
+    docker exec $(docker ps --filter name=postgres -q) \
+      psql -U bookingbot -d bookingbot \
+      -f /docker-entrypoint-initdb.d/003-migrations.sql
+
+------------------------------------------------------------------------
+
 # Migration JSON → PostgreSQL
 
-Falls ältere Daten existieren:
-
-    scripts/migrate-json-to-postgres.js
-
-Ausführen:
+Falls ältere JSON-Daten vorhanden sind:
 
     docker exec -it <bot_container> node scripts/migrate-json-to-postgres.js
 
@@ -223,21 +276,21 @@ Ausführen:
 
 # Backup
 
-Backups können mit `pg_dump` erstellt werden.
-
-Beispiel:
-
-    pg_dump bookingbot | gzip > bookingbot_backup.sql.gz
+    pg_dump bookingbot | gzip > bookingbot_$(date +%Y-%m-%d).sql.gz
 
 Restore:
 
     gunzip -c backup.sql.gz | psql bookingbot
 
+Ein automatischer täglicher Backup-Service ist im Stack enthalten
+(`postgres-backup`).
+
 ------------------------------------------------------------------------
 
 # CI/CD
 
-GitHub Actions baut automatisch Docker Images.
+GitHub Actions baut automatisch Docker Images mit Registry-Cache
+(schnellere Builds bei reinen Code-Änderungen).
 
   Branch   Image
   -------- --------
@@ -256,7 +309,7 @@ Der Bot kann parallel in einem Testsystem betrieben werden:
 
 -   separater Discord Server
 -   eigener Bot Token
--   eigener Docker Stack
+-   `docker/stack-test.yml` als Stack-Vorlage
 
 ------------------------------------------------------------------------
 
@@ -270,12 +323,13 @@ Der Bot kann parallel in einem Testsystem betrieben werden:
 
     docker service ps lancampus-booking-bot_bot
 
+## Reinigungsansicht nach Update aktualisieren
+
+Nach einem Bot-Update `/refresh` in jedem aktiven Buchungs-Channel
+ausführen, um alte UI-Elemente zu aktualisieren.
+
 ------------------------------------------------------------------------
 
 # Lizenz
 
-Private Project -- LanCampus
-
-## Workflow-Check
-
-Diese minimale Änderung soll den `dev`-Workflow auf GitHub triggern, damit wir sehen, ob die Builds und das Package wie erwartet erzeugt werden.
+Private Project – LanCampus
