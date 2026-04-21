@@ -13,6 +13,17 @@ function verifySecret(incoming) {
   }
 }
 
+const webhookDebounce = new Map();
+const DEBOUNCE_MS = 5_000;
+
+function isDebouncedOut(bookingId) {
+  const last = webhookDebounce.get(bookingId);
+  const now = Date.now();
+  if (last && now - last < DEBOUNCE_MS) return true;
+  webhookDebounce.set(bookingId, now);
+  return false;
+}
+
 export function createHttpApp(deps) {
   const app = express();
   app.use(express.json({ limit: "1mb" }));
@@ -23,6 +34,11 @@ export function createHttpApp(deps) {
     try {
       if (!verifySecret(req.header("x-shared-secret"))) {
         return res.status(401).send("unauthorized");
+      }
+
+      const bookingId = req.body?.booking_id;
+      if (bookingId && isDebouncedOut(String(bookingId))) {
+        return res.status(429).json({ ok: false, reason: "debounced" });
       }
       if (!deps.client.isReady()) {
         return res.status(503).send("bot not ready");

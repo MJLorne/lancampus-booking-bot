@@ -23,6 +23,7 @@ export function createReminderService({ client, store, audit }) {
           if (!booking?.assignee?.user_id || !booking?.start_date || !booking?.channel_id || booking.archived) continue;
           const startUtcMs = parseYmdStringToUtcMs(booking.start_date);
           if (startUtcMs == null) continue;
+          if (startUtcMs < todayUtcMs) continue;
           const remindersSent = booking.reminders_sent || {};
 
           for (const daysBefore of daysList) {
