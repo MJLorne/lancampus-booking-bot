@@ -282,9 +282,13 @@ export function registerInteractionHandlers(client, deps) {
             msg.components?.some((row) =>
               row.components?.some((c) => c.customId === "reactivate_booking")
             );
-        
+
           if (hasReactivate) {
             await msg.unpin().catch(() => {});
+            await msg.edit({
+              content: "🔓 **Diese Buchung wurde reaktiviert.**",
+              components: []
+            }).catch(() => {});
           }
         }
 
