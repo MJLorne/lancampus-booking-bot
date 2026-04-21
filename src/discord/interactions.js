@@ -1,6 +1,7 @@
 import { MessageFlags } from "discord.js";
 import { config } from "../config.js";
 import { getAssigneeFromTopic } from "./renderers.js";
+import { buildZeitraum, normalizeDateToYMD, buildFullName } from "../utils/booking.js";
 import {
   allAreasCompleted,
   defaultCleaningChecklist,
@@ -16,6 +17,45 @@ import {
   isAdmin,
 } from "../services/bookingService.js";
 import { handleChatInputCommand } from "./commands.js";
+
+async function sendAssigneeDm(member, booking) {
+  try {
+    const zeitraum = buildZeitraum({
+      start_date: normalizeDateToYMD(booking?.start_date),
+      end_date: normalizeDateToYMD(booking?.end_date),
+      start_time: booking?.start_time,
+      end_time: booking?.end_time,
+    });
+    const fullName = buildFullName(booking?.lastname, booking?.firstname);
+    await member.send(
+      `📋 **Du wurdest als Betreuer eingetragen!**\n\n` +
+      `**Buchung:** ${booking.booking_id}\n` +
+      `**Zeitraum:** ${zeitraum}\n` +
+      (fullName ? `**Gast:** ${fullName}\n` : "") +
+      (booking?.persons ? `**Personen:** ${booking.persons}\n` : "") +
+      `**Channel:** <#${booking.channel_id}>`
+    );
+  } catch {
+    // DMs may be disabled by the user
+  }
+}
+
+function buildCleaningReport(cleaning) {
+  const lines = ["📊 **Reinigungsbericht**\n"];
+  for (const [, area] of Object.entries(cleaning.areas || {})) {
+    const areaLabel = area.label || "Bereich";
+    const tasksDone = Object.values(area.tasks || {}).filter((t) => t.done);
+    const tasksMissed = Object.values(area.tasks || {}).filter((t) => !t.done);
+    const bySet = [...new Set(tasksDone.map((t) => t.done_by).filter(Boolean))];
+    const byStr = bySet.join(", ") || "—";
+    const icon = area.completed ? "✅" : tasksMissed.length ? "⚠️" : "✅";
+    lines.push(`${icon} **${areaLabel}** (${byStr})`);
+  }
+  if (cleaning.meta?.completed_by) {
+    lines.push(`\n_Abgeschlossen von **${cleaning.meta.completed_by}**_`);
+  }
+  return lines.join("\n");
+}
 
 export function registerInteractionHandlers(client, deps) {
   client.on("interactionCreate", async (interaction) => {
@@ -66,6 +106,7 @@ export function registerInteractionHandlers(client, deps) {
           });
 
           await channel.send(`✅ **Endreinigung abgeschlossen** (von **${memberName}**)`).catch(() => {});
+          await channel.send(buildCleaningReport(cleaning)).catch(() => {});
           await syncBookingChannel({ channel, booking: updatedBooking, client, store, member });
         } else {
           await ensureCleaningOverviewPinned({ channel, bookingId, store });
@@ -111,6 +152,7 @@ export function registerInteractionHandlers(client, deps) {
 
         await pinSingleAssignee(channel, memberObj.displayName, memberObj.id, client.user.id);
         await syncBookingChannel({ channel, booking: updatedBooking, client, store, member });
+        await sendAssigneeDm(memberObj, updatedBooking);
 
         await audit.log(
           `🔁 Betreuer geändert: **${booking.booking_id}** → ${memberObj.displayName} (<@${memberObj.id}>) in <#${channel.id}>`
@@ -337,6 +379,7 @@ export function registerInteractionHandlers(client, deps) {
           });
 
           await syncBookingChannel({ channel, booking: updatedBooking, client, store, member });
+          await sendAssigneeDm(member, updatedBooking);
         }
 
         await audit.log(

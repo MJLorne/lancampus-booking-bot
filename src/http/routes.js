@@ -40,6 +40,13 @@ export function createHttpApp(deps) {
       if (bookingId && isDebouncedOut(String(bookingId))) {
         return res.status(429).json({ ok: false, reason: "debounced" });
       }
+
+      const requiredFields = ["booking_id", "start_date", "end_date"];
+      const missingFields = requiredFields.filter((f) => !req.body?.[f]);
+      if (missingFields.length) {
+        return res.status(400).json({ ok: false, reason: `missing fields: ${missingFields.join(", ")}` });
+      }
+
       if (!deps.client.isReady()) {
         return res.status(503).send("bot not ready");
       }

@@ -174,6 +174,42 @@ export async function upsertCleaningDetailMessage({ channel, bookingId, areaKey,
   return msg;
 }
 
+export async function updateOverviewChannel({ client, store }) {
+  if (!config.overviewChannelId) return;
+  try {
+    const overviewChannel = await client.channels.fetch(config.overviewChannelId).catch(() => null);
+    if (!overviewChannel?.isTextBased()) return;
+
+    const all = await store.loadBookings();
+    const active = all
+      .filter((b) => !b.archived)
+      .sort((a, b) => (a.start_date || "").localeCompare(b.start_date || ""));
+
+    const lines = active.map((b) => {
+      const assignee = b.assignee?.display_name || "⚠️ kein Betreuer";
+      const ch = b.channel_id ? `<#${b.channel_id}>` : "—";
+      const status = b.cleaning_checklist?.meta?.completed ? "✅" : b.assignee?.user_id ? "🟢" : "🟡";
+      return `${status} **${b.start_date}** → **${b.end_date}** | ${ch} | ${assignee}`;
+    });
+
+    const ts = Math.floor(Date.now() / 1000);
+    const content = lines.length
+      ? `📋 **Buchungsübersicht** – <t:${ts}:f>\n\n${lines.join("\n")}`
+      : `📋 **Buchungsübersicht** – <t:${ts}:f>\n\n_Keine aktiven Buchungen._`;
+
+    const msgs = await overviewChannel.messages.fetch({ limit: 20 }).catch(() => null);
+    const existing = msgs?.find((m) => m.author?.id === client.user.id && m.content?.startsWith("📋 **Buchungsübersicht**"));
+
+    if (existing) {
+      await existing.edit(content).catch(() => {});
+    } else {
+      await overviewChannel.send(content).catch(() => {});
+    }
+  } catch (e) {
+    console.error("updateOverviewChannel error:", e);
+  }
+}
+
 export async function syncBookingChannel({ channel, booking, client, store, member }) {
   if (!channel?.isTextBased() || !booking) return false;
   await channel
@@ -183,6 +219,7 @@ export async function syncBookingChannel({ channel, booking, client, store, memb
   const edited = await syncOverviewMessage({ channel, booking, client, store, member });
   await ensureCleaningOverviewPinned({ channel, bookingId: String(booking.booking_id), store });
   await ensureCleaningSelectMessage({ channel, bookingId: String(booking.booking_id), store });
+  updateOverviewChannel({ client, store }).catch(() => {});
   return edited;
 }
 
@@ -283,6 +320,10 @@ export async function createOrUpdateBookingFromWebhook({ body, client, store, au
 
   try {
     await audit.log(`📥 Neue Buchung ${bookingId} → Channel erstellt: <#${channel.id}>`);
+
+    if (config.notifyRoleId) {
+      await channel.send(`<@&${config.notifyRoleId}> Neue Buchung eingegangen!`).catch(() => {});
+    }
 
     await guild.members.fetch().catch(() => {});
     const assigneeOptions = buildAssigneeOptions(guild);

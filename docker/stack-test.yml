@@ -16,6 +16,8 @@ services:
       ARCHIVE_CATEGORY_ID: ""
       ARCHIVE_LOCK_CHANNEL: "true"
       AUDIT_CHANNEL_ID: ""
+      NOTIFY_ROLE_ID: ""
+      OVERVIEW_CHANNEL_ID: ""
       ASSIGNEE_MANAGER_ROLE_NAME: ""
       DATA_DIR: "/data"
       STORAGE_DRIVER: postgres

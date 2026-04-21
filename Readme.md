@@ -58,7 +58,8 @@ Nur folgende Rollen dürfen Betreuer ändern:
 -   LanCampus-Staff (konfigurierbar via `ASSIGNEE_MANAGER_ROLE_NAME`)
 
 Der aktuelle Betreuer wird im Channel-Topic und als gepinnte Nachricht
-gespeichert.
+gespeichert. Bei Zuweisung erhält der Betreuer automatisch eine Discord-DM
+mit Buchungsdetails (Zeitraum, Gast, Channel-Link).
 
 ------------------------------------------------------------------------
 
@@ -89,6 +90,9 @@ Bereiche:
 
 Wenn alle Bereiche abgeschlossen sind, wird der Button
 „Endreinigung abschließen" aktiv. Erst danach kann archiviert werden.
+
+Nach dem Abschluss wird automatisch ein **Reinigungsbericht** im Channel
+gepostet (welche Bereiche von wem erledigt wurden).
 
 ------------------------------------------------------------------------
 
@@ -237,6 +241,8 @@ Docker Stack deployen:
   WP_SHARED_SECRET            WordPress Webhook Secret                  –
   ARCHIVE_CATEGORY_ID         Kategorie für archivierte Buchungen       –
   AUDIT_CHANNEL_ID            Channel für Audit-Logs                    (leer)
+  NOTIFY_ROLE_ID              Rolle, die bei neuer Buchung gepingt wird (leer)
+  OVERVIEW_CHANNEL_ID         Channel für Buchungsübersicht             (leer)
   ADMIN_ROLE_NAME             Name der Admin-Rolle                      Admin
   ASSIGNEE_MANAGER_ROLE_NAME  Name der Staff-Rolle                      LanCampus-Staff
   STORAGE_DRIVER              `json` oder `postgres`                    json

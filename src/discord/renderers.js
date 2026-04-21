@@ -105,6 +105,13 @@ export function buildBookingActionRows(booking, member, assigneeOptions = []) {
       .setDisabled(!!booking?.archived || !canArchiveBooking(booking))
   );
 
+  const currentAssigneeId = booking?.assignee?.user_id;
+  const markedOptions = assigneeOptions.map((opt) =>
+    opt.value === currentAssigneeId
+      ? { ...opt, label: `✓ ${opt.label}`.slice(0, 100) }
+      : opt
+  );
+
   const select = new StringSelectMenuBuilder()
     .setCustomId("select_assignee")
     .setPlaceholder(
@@ -116,8 +123,8 @@ export function buildBookingActionRows(booking, member, assigneeOptions = []) {
     .setMaxValues(1)
     .setDisabled(!!booking?.archived || !isStaffOrAdmin || assigneeOptions.length === 0);
 
-  if (assigneeOptions.length > 0) {
-    select.addOptions(assigneeOptions.slice(0, 25));
+  if (markedOptions.length > 0) {
+    select.addOptions(markedOptions.slice(0, 25));
   }
 
   const row2 = new ActionRowBuilder().addComponents(select);

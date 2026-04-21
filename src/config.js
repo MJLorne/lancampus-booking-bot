@@ -13,6 +13,8 @@ export const config = {
   adminRoleName: env.ADMIN_ROLE_NAME || "Admin",
   assigneeManagerRoleName: env.ASSIGNEE_MANAGER_ROLE_NAME || "LanCampus-Staff",
   auditChannelId: env.AUDIT_CHANNEL_ID || "",
+  notifyRoleId: env.NOTIFY_ROLE_ID || "",
+  overviewChannelId: env.OVERVIEW_CHANNEL_ID || "",
 
   reminderDays: env.REMINDER_DAYS || "7,1",
   reminderCheckMinutes: Math.max(5, Number(env.REMINDER_CHECK_MINUTES) || 60),
