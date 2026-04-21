@@ -15,7 +15,7 @@ import {
   renderAreaDetailText,
   buildTaskControls
 } from "./cleaningService.js";
-import { normalizeDateToYMD, buildFullName, buildZeitraum, slugify } from "../utils/booking.js";
+import { normalizeDateToYMD, buildFullName, slugify } from "../utils/booking.js";
 
 function normalizePins(pins) {
   if (!pins) return [];
@@ -52,7 +52,9 @@ export async function pinSingleAssignee(channel, assignee, setterUserId, clientU
 export async function syncOverviewMessage({ channel, booking, client, store, member }) {
   if (!channel?.isTextBased() || !booking) return false;
 
-  await channel.guild.members.fetch().catch(() => {});
+  if (channel.guild.members.cache.size <= 1) {
+    await channel.guild.members.fetch().catch(() => {});
+  }
   const assigneeOptions = buildAssigneeOptions(channel.guild);
 
   const embed = buildBookingEmbed(booking);
@@ -206,13 +208,6 @@ export async function createOrUpdateBookingFromWebhook({ body, client, store, au
   const normalizedEndDate = normalizeDateToYMD(end_date);
   const fullName = buildFullName(lastname, firstname);
 
-  buildZeitraum({
-    start_date: normalizedStartDate,
-    end_date: normalizedEndDate,
-    start_time,
-    end_time
-  });
-
   const guild = await client.guilds.fetch(config.guildId);
   const me = await guild.members.fetchMe();
 
@@ -286,28 +281,31 @@ export async function createOrUpdateBookingFromWebhook({ body, client, store, au
     topic: buildChannelTopic(initialBooking)
   });
 
-  await audit.log(`📥 Neue Buchung ${bookingId} → Channel erstellt: <#${channel.id}>`);
+  try {
+    await audit.log(`📥 Neue Buchung ${bookingId} → Channel erstellt: <#${channel.id}>`);
 
-  await guild.members.fetch().catch(() => {});
-  const assigneeOptions = buildAssigneeOptions(guild);
+    await guild.members.fetch().catch(() => {});
+    const assigneeOptions = buildAssigneeOptions(guild);
 
-  const overviewMsg = await channel.send({
-    content: "📥 Neue Buchung eingegangen",
-    embeds: [buildBookingEmbed(initialBooking)],
-    components: buildBookingActionRows(initialBooking, null, assigneeOptions)
-  });
+    const overviewMsg = await channel.send({
+      content: "📥 Neue Buchung eingegangen",
+      embeds: [buildBookingEmbed(initialBooking)],
+      components: buildBookingActionRows(initialBooking, null, assigneeOptions)
+    });
 
-  const savedBooking = await store.upsertBooking({
-    ...initialBooking,
-    channel_id: channel.id,
-    channel_name: channel.name,
-    overview_message_id: overviewMsg.id
-  });
+    const savedBooking = await store.upsertBooking({
+      ...initialBooking,
+      channel_id: channel.id,
+      channel_name: channel.name,
+      overview_message_id: overviewMsg.id
+    });
 
-  await ensureCleaningOverviewPinned({ channel, bookingId: String(bookingId), store });
-  await ensureCleaningSelectMessage({ channel, bookingId: String(bookingId), store });
-  await syncBookingChannel({ channel, booking: savedBooking, client, store, member: null });
+    await syncBookingChannel({ channel, booking: savedBooking, client, store, member: null });
 
-  await audit.log(`📥 Neue Buchung: **${bookingId}** → <#${channel.id}> (${fullName || "—"})`);
-  return { channelId: channel.id, reused: false, updated: false };
+    await audit.log(`📥 Neue Buchung: **${bookingId}** → <#${channel.id}> (${fullName || "—"})`);
+    return { channelId: channel.id, reused: false, updated: false };
+  } catch (err) {
+    await channel.delete().catch(() => {});
+    throw err;
+  }
 }

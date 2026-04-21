@@ -5,7 +5,6 @@ import {
   StringSelectMenuBuilder,
   StringSelectMenuOptionBuilder,
 } from "discord.js";
-import { config } from "../config.js";
 
 export function defaultCleaningChecklist() {
   return {
@@ -101,31 +100,32 @@ export function renderAreaDetailText(area) {
 
 export function buildTaskControls(areaKey, area) {
   const entries = Object.entries(area?.tasks || {});
-  if (entries.length <= config.smallAreaTasksMax) {
-    return [new ActionRowBuilder().addComponents(
-      ...entries.slice(0, 5).map(([taskKey, task]) =>
-        new ButtonBuilder()
-          .setCustomId(`cleaning_toggle:${areaKey}:${taskKey}`)
-          .setLabel(task.label.slice(0, 80))
-          .setStyle(task.done ? ButtonStyle.Success : ButtonStyle.Secondary)
-      )
-    )];
-  }
 
   const select = new StringSelectMenuBuilder()
-    .setCustomId(`cleaning_pick_task:${areaKey}`)
-    .setPlaceholder("Aufgabe auswählen …")
-    .addOptions(entries.slice(0, 25).map(([taskKey, task]) =>
-      new StringSelectMenuOptionBuilder()
-        .setLabel(task.label.slice(0, 100))
-        .setValue(taskKey)
-        .setEmoji(task.done ? "✅" : "⬜")
-    ));
+    .setCustomId(`cleaning_pick_tasks:${areaKey}`)
+    .setPlaceholder("Aufgaben auswählen …")
+    .setMinValues(1)
+    .setMaxValues(Math.min(entries.length, 25))
+    .addOptions(
+      entries.slice(0, 25).map(([taskKey, task]) =>
+        new StringSelectMenuOptionBuilder()
+          .setLabel(task.label.slice(0, 100))
+          .setValue(taskKey)
+          .setEmoji(task.done ? "✅" : "⬜")
+      )
+    );
 
   return [
     new ActionRowBuilder().addComponents(select),
     new ActionRowBuilder().addComponents(
-      new ButtonBuilder().setCustomId(`cleaning_toggle_picked:${areaKey}`).setLabel("Aufgabe umschalten").setStyle(ButtonStyle.Primary)
-    )
+      new ButtonBuilder()
+        .setCustomId(`cleaning_mark_done:${areaKey}`)
+        .setLabel("Als erledigt markieren")
+        .setStyle(ButtonStyle.Success),
+      new ButtonBuilder()
+        .setCustomId(`cleaning_mark_undone:${areaKey}`)
+        .setLabel("Als offen markieren")
+        .setStyle(ButtonStyle.Secondary)
+    ),
   ];
 }

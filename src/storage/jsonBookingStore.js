@@ -53,10 +53,8 @@ export async function upsertBooking(entry) {
       updated_at: now,
       created_at: idx >= 0 ? bookings[idx].created_at : now,
       reminders_sent: idx >= 0 ? (bookings[idx].reminders_sent || {}) : (entry.reminders_sent || {}),
-      archived: idx >= 0 ? (bookings[idx].archived ?? entry.archived ?? false) : (entry.archived ?? false),
-      cleaning_checklist: idx >= 0
-        ? (bookings[idx].cleaning_checklist || entry.cleaning_checklist)
-        : entry.cleaning_checklist,
+      archived: entry.archived ?? (idx >= 0 ? bookings[idx].archived : false) ?? false,
+      cleaning_checklist: entry.cleaning_checklist ?? (idx >= 0 ? bookings[idx].cleaning_checklist : undefined),
     };
 
     if (idx >= 0) bookings[idx] = merged;

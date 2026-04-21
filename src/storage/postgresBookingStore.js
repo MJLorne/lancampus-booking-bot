@@ -30,9 +30,12 @@ function mapRow(row) {
     cleaning_detail_message_id: row.cleaning_detail_message_id,
     assignee: row.assignee,
     cleaning_checklist: row.cleaning_checklist,
-	cleaning_picked_task: row.cleaning_picked_task,
+    cleaning_picked_task: row.cleaning_picked_task,
     reminders_sent: row.reminders_sent,
     archived: row.archived,
+    archived_at: row.archived_at?.toISOString?.() || row.archived_at || null,
+    archived_reason: row.archived_reason || null,
+    reactivated_at: row.reactivated_at?.toISOString?.() || row.reactivated_at || null,
     created_at: row.created_at?.toISOString?.() || row.created_at,
     updated_at: row.updated_at?.toISOString?.() || row.updated_at,
   };
@@ -88,9 +91,12 @@ export async function upsertBooking(entry) {
     cleaning_detail_message_id: entry.cleaning_detail_message_id ?? null,
     assignee: entry.assignee ?? null,
     cleaning_checklist: entry.cleaning_checklist ?? {},
-	cleaning_picked_task: entry.cleaning_picked_task ?? {},
+    cleaning_picked_task: entry.cleaning_picked_task ?? {},
     reminders_sent: entry.reminders_sent ?? {},
     archived: entry.archived ?? false,
+    archived_at: entry.archived_at ?? null,
+    archived_reason: entry.archived_reason ?? null,
+    reactivated_at: entry.reactivated_at ?? null,
     updated_at: now,
     created_at: entry.created_at ?? now,
   };
@@ -120,6 +126,9 @@ export async function upsertBooking(entry) {
     cleaning_picked_task,
     reminders_sent,
     archived,
+    archived_at,
+    archived_reason,
+    reactivated_at,
     created_at,
     updated_at
   )
@@ -127,7 +136,7 @@ export async function upsertBooking(entry) {
     $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11,
     $12, $13, $14, $15, $16, $17,
     $18::jsonb, $19::jsonb, $20::jsonb, $21::jsonb,
-    $22, $23::timestamptz, $24::timestamptz
+    $22, $23::timestamptz, $24, $25, $26::timestamptz, $27::timestamptz
   )
   ON CONFLICT (booking_id) DO UPDATE SET
     booking_date = EXCLUDED.booking_date,
@@ -151,6 +160,9 @@ export async function upsertBooking(entry) {
     cleaning_picked_task = EXCLUDED.cleaning_picked_task,
     reminders_sent = EXCLUDED.reminders_sent,
     archived = EXCLUDED.archived,
+    archived_at = EXCLUDED.archived_at,
+    archived_reason = EXCLUDED.archived_reason,
+    reactivated_at = EXCLUDED.reactivated_at,
     updated_at = EXCLUDED.updated_at
   RETURNING *
   `,
@@ -177,6 +189,9 @@ export async function upsertBooking(entry) {
     JSON.stringify(values.cleaning_picked_task),
     JSON.stringify(values.reminders_sent),
     values.archived,
+    values.archived_at,
+    values.archived_reason,
+    values.reactivated_at,
     values.created_at,
     values.updated_at,
   ]

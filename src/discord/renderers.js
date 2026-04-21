@@ -15,6 +15,15 @@ function getBookingStatus(booking) {
   return "🟡 Offen";
 }
 
+function getCleaningProgress(booking) {
+  if (booking?.cleaning_checklist?.meta?.completed) return "Abgeschlossen ✅";
+  const areas = booking?.cleaning_checklist?.areas || {};
+  const total = Object.keys(areas).length;
+  if (total === 0) return "Offen";
+  const done = Object.values(areas).filter((a) => a.completed).length;
+  return `${done}/${total} Bereiche`;
+}
+
 function getAssigneeDisplay(booking) {
   if (booking?.assignee?.user_id) {
     return `<@${booking.assignee.user_id}>`;
@@ -70,7 +79,7 @@ export function buildBookingEmbed(booking) {
       { name: "Wäschepaket", value: booking?.laundry_package ? String(booking.laundry_package) : "—", inline: true },
       { name: "Status", value: status, inline: true },
       { name: "Betreuer", value: assignee, inline: true },
-      { name: "Reinigung", value: booking?.cleaning_checklist?.meta?.completed ? "Abgeschlossen ✅" : "Offen", inline: true },
+      { name: "Reinigung", value: getCleaningProgress(booking), inline: true },
       { name: "Archivstatus", value: booking?.archived ? "Archiviert 📦" : "Aktiv", inline: true },
     ],
   };
