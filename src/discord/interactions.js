@@ -119,10 +119,6 @@ export function registerInteractionHandlers(client, deps) {
       }
 
       if (interaction.isStringSelectMenu()) {
-        if (interaction.customId === "select_assignee") {
-          return;
-        }
-
         if (interaction.customId === "cleaning_select_area") {
           const areaKey = interaction.values?.[0];
           if (!bookingId) return;

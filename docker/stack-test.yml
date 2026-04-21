@@ -19,7 +19,7 @@ services:
       ASSIGNEE_MANAGER_ROLE_NAME: ""
       DATA_DIR: "/data"
       STORAGE_DRIVER: postgres
-      DATABASE_URL: postgres://bookingbot:PASS@postgres:5432/bookingbot
+      DATABASE_URL: postgres://bookingbot:CHANGE_ME@postgres:5432/bookingbot
     volumes:
       - /DockerData/lancampusbottest/data:/data
     healthcheck:
@@ -45,10 +45,10 @@ services:
     environment:
       POSTGRES_DB: bookingbot
       POSTGRES_USER: bookingbot
-      POSTGRES_PASSWORD: ""
+      POSTGRES_PASSWORD: "CHANGE_ME"
       TZ: "Europe/Berlin"
     volumes:
-      - postgres_data:/var/lib/postgresql
+      - postgres_data:/var/lib/postgresql/data
       - /DockerData/lancampusbottest/postgres/init:/docker-entrypoint-initdb.d:ro
     networks:
       - bookingbotinternal
@@ -62,27 +62,27 @@ services:
       replicas: 1
       restart_policy:
         condition: on-failure
-        
-   postgres-backup:
-      image: postgres:18
-      command: >
-        sh -c '
-          while true; do
-            echo "Starting backup";
-            pg_dump -h postgres -U bookingbot -d bookingbot \
-            | gzip > /backups/bookingbot_$$(date +%Y-%m-%d_%H-%M).sql.gz;
-            echo "Backup finished";
-            sleep 86400;
-          done
-        '
-      environment:
-        PGPASSWORD: YOUR_DB_PASSWORD
-      volumes:
-        - /DockerData/lancampus-postgres-backups:/backups
-      networks:
-        - bookingbotinternal
-      deploy:
-        replicas: 1
+
+  postgres-backup:
+    image: postgres:18
+    command: >
+      sh -c '
+        while true; do
+          echo "Starting backup";
+          pg_dump -h postgres -U bookingbot -d bookingbot \
+          | gzip > /backups/bookingbot_$$(date +%Y-%m-%d_%H-%M).sql.gz;
+          echo "Backup finished";
+          sleep 86400;
+        done
+      '
+    environment:
+      PGPASSWORD: CHANGE_ME
+    volumes:
+      - /DockerData/lancampus-postgres-backups:/backups
+    networks:
+      - bookingbotinternal
+    deploy:
+      replicas: 1
 
 networks:
   NPM-SupportNetz:

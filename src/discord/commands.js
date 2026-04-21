@@ -12,10 +12,10 @@ export async function registerSlashCommands(client) {
 
   const rest = new REST({ version: "10" }).setToken(client.token);
 
-	await rest.put(
-	  Routes.applicationGuildCommands(client.user.id, config.guildId),
-	  { body: commands }
-	);
+  await rest.put(
+    Routes.applicationGuildCommands(client.user.id, config.guildId),
+    { body: commands }
+  );
 
   console.log("✅ Slash command /refresh registriert");
 }

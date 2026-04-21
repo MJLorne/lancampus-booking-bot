@@ -103,7 +103,7 @@ export function buildTaskControls(areaKey, area) {
   const entries = Object.entries(area?.tasks || {});
   if (entries.length <= config.smallAreaTasksMax) {
     return [new ActionRowBuilder().addComponents(
-      ...entries.slice(0, 5).map(([taskKey, task]) =>
+      ...entries.slice(0, config.smallAreaTasksMax).map(([taskKey, task]) =>
         new ButtonBuilder()
           .setCustomId(`cleaning_toggle:${areaKey}:${taskKey}`)
           .setLabel(task.label.slice(0, 80))

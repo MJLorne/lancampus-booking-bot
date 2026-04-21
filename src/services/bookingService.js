@@ -15,7 +15,7 @@ import {
   renderAreaDetailText,
   buildTaskControls
 } from "./cleaningService.js";
-import { normalizeDateToYMD, buildFullName, buildZeitraum, slugify } from "../utils/booking.js";
+import { normalizeDateToYMD, buildFullName, slugify } from "../utils/booking.js";
 
 function normalizePins(pins) {
   if (!pins) return [];
@@ -205,13 +205,6 @@ export async function createOrUpdateBookingFromWebhook({ body, client, store, au
   const normalizedStartDate = normalizeDateToYMD(start_date);
   const normalizedEndDate = normalizeDateToYMD(end_date);
   const fullName = buildFullName(lastname, firstname);
-
-  buildZeitraum({
-    start_date: normalizedStartDate,
-    end_date: normalizedEndDate,
-    start_time,
-    end_time
-  });
 
   const guild = await client.guilds.fetch(config.guildId);
   const me = await guild.members.fetchMe();

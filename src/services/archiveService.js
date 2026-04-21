@@ -60,6 +60,10 @@ export function createArchiveService({ client, store, audit }) {
 
           const channel = await client.channels.fetch(booking.channel_id).catch(() => null);
           if (!channel?.isTextBased()) {
+            if (!canArchiveBooking(booking)) {
+              await audit.log(`⏸️ Auto-Archiv übersprungen (Channel fehlt): **${booking.booking_id}** – Endreinigung noch nicht abgeschlossen.`);
+              continue;
+            }
             await store.updateBooking(booking.booking_id, {
               archived: true,
               archived_at: new Date().toISOString(),
