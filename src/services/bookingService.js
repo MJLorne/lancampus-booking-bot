@@ -181,6 +181,18 @@ export async function syncBookingChannel({ channel, booking, client, store, memb
   const edited = await syncOverviewMessage({ channel, booking, client, store, member });
   await ensureCleaningOverviewPinned({ channel, bookingId: String(booking.booking_id), store });
   await ensureCleaningSelectMessage({ channel, bookingId: String(booking.booking_id), store });
+
+  if (booking.cleaning_detail_message_id) {
+    const detailMsg = await channel.messages.fetch(booking.cleaning_detail_message_id).catch(() => null);
+    if (detailMsg) {
+      await detailMsg.edit({
+        content: "🔄 _Bereich erneut auswählen, um die Aufgaben zu sehen._",
+        components: []
+      }).catch(() => {});
+    }
+    await store.updateBooking(booking.booking_id, { cleaning_detail_message_id: null });
+  }
+
   return edited;
 }
 

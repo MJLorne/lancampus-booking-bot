@@ -159,6 +159,17 @@ export function registerInteractionHandlers(client, deps) {
       }
 
       if (interaction.isButton() && (
+        interaction.customId.startsWith("cleaning_toggle:") ||
+        interaction.customId.startsWith("cleaning_toggle_picked:")
+      )) {
+        await interaction.reply({
+          content: "🔄 Die Reinigungsansicht wurde aktualisiert. Bitte wähle den Bereich erneut aus dem Dropdown.",
+          flags: MessageFlags.Ephemeral
+        });
+        return;
+      }
+
+      if (interaction.isButton() && (
         interaction.customId.startsWith("cleaning_mark_done:") ||
         interaction.customId.startsWith("cleaning_mark_undone:")
       )) {
