@@ -3,8 +3,6 @@ import { config } from "../config.js";
 import { getAssigneeFromTopic } from "./renderers.js";
 import {
   allAreasCompleted,
-  defaultCleaningChecklist,
-  ensureTasksInChecklist,
   canArchiveBooking,
 } from "../services/cleaningService.js";
 import {
@@ -62,11 +60,20 @@ export function registerInteractionHandlers(client, deps) {
 
         await interaction.deferUpdate();
 
-        const cleaning = ensureTasksInChecklist(
-          channelBooking?.cleaning_checklist || defaultCleaningChecklist()
-        );
+        let areasComplete = false;
+        let completedNow = false;
+        const updatedBooking = await store.mutateCleaningChecklist(bookingId, (cleaning) => {
+          areasComplete = allAreasCompleted(cleaning);
+          if (areasComplete && !cleaning.meta?.completed) {
+            cleaning.meta.completed = true;
+            cleaning.meta.completed_at = new Date().toISOString();
+            cleaning.meta.completed_by = memberName;
+            completedNow = true;
+          }
+          return cleaning;
+        });
 
-        if (!allAreasCompleted(cleaning)) {
+        if (!areasComplete) {
           await channel.send(
             "ℹ️ Endreinigung kann erst abgeschlossen werden, wenn alle Bereiche erledigt sind."
           ).catch(() => {});
@@ -74,15 +81,7 @@ export function registerInteractionHandlers(client, deps) {
           return;
         }
 
-        if (!cleaning.meta?.completed) {
-          cleaning.meta.completed = true;
-          cleaning.meta.completed_at = new Date().toISOString();
-          cleaning.meta.completed_by = memberName;
-
-          const updatedBooking = await store.updateBooking(bookingId, {
-            cleaning_checklist: cleaning
-          });
-
+        if (completedNow) {
           await channel.send(`✅ **Endreinigung abgeschlossen** (von **${memberName}**)`).catch(() => {});
           await syncBookingChannel({ channel, booking: updatedBooking, client, store, member });
         } else {
@@ -132,13 +131,7 @@ export function registerInteractionHandlers(client, deps) {
 
           await interaction.deferUpdate();
 
-          const cleaning = ensureTasksInChecklist(
-            channelBooking?.cleaning_checklist || defaultCleaningChecklist()
-          );
-
-          const updatedBooking = await store.updateBooking(bookingId, {
-            cleaning_checklist: cleaning
-          });
+          const updatedBooking = await store.mutateCleaningChecklist(bookingId, (cleaning) => cleaning);
 
           await upsertCleaningDetailMessage({ channel, bookingId, areaKey, store });
           await syncBookingChannel({ channel, booking: updatedBooking, client, store, member });
@@ -201,20 +194,19 @@ export function registerInteractionHandlers(client, deps) {
 
         await interaction.deferUpdate();
 
-        const cleaning = ensureTasksInChecklist(
-          channelBooking?.cleaning_checklist || defaultCleaningChecklist()
-        );
-
-        for (const taskKey of pickedKeys) {
-          const task = cleaning.areas?.[areaKey]?.tasks?.[taskKey];
-          if (!task) continue;
-          task.done = markDone;
-          task.done_by = markDone ? memberName : null;
-          task.done_at = markDone ? new Date().toISOString() : null;
-        }
-        cleaning.areas[areaKey].completed = Object.values(cleaning.areas[areaKey].tasks).every((t) => t.done);
-
-        const updatedBooking = await store.updateBooking(bookingId, { cleaning_checklist: cleaning });
+        const updatedBooking = await store.mutateCleaningChecklist(bookingId, (cleaning) => {
+          for (const taskKey of pickedKeys) {
+            const task = cleaning.areas?.[areaKey]?.tasks?.[taskKey];
+            if (!task) continue;
+            task.done = markDone;
+            task.done_by = markDone ? memberName : null;
+            task.done_at = markDone ? new Date().toISOString() : null;
+          }
+          if (cleaning.areas?.[areaKey]) {
+            cleaning.areas[areaKey].completed = Object.values(cleaning.areas[areaKey].tasks).every((t) => t.done);
+          }
+          return cleaning;
+        });
         await upsertCleaningDetailMessage({ channel, bookingId, areaKey, store });
         await syncBookingChannel({ channel, booking: updatedBooking, client, store, member });
         return;

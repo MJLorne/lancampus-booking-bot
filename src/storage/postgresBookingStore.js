@@ -1,5 +1,7 @@
 import pg from "pg";
 import { config } from "../config.js";
+import { appendBookingNote } from "../services/bookingNotesService.js";
+import { normalizeCleaningChecklist } from "../services/cleaningService.js";
 
 const { Pool } = pg;
 
@@ -200,18 +202,86 @@ export async function upsertBooking(entry) {
   return mapRow(res.rows[0]);
 }
 
+const UPDATE_COLUMNS = {
+  booking_date: "",
+  start_date: "",
+  end_date: "",
+  start_time: "",
+  end_time: "",
+  firstname: "",
+  lastname: "",
+  persons: "",
+  laundry_package: "",
+  club_name: "",
+  channel_id: "",
+  channel_name: "",
+  overview_message_id: "",
+  cleaning_overview_message_id: "",
+  cleaning_select_message_id: "",
+  cleaning_detail_message_id: "",
+  assignee: "::jsonb",
+  cleaning_checklist: "::jsonb",
+  cleaning_picked_task: "::jsonb",
+  reminders_sent: "::jsonb",
+  archived: "",
+  archived_at: "::timestamptz",
+  archived_reason: "",
+  reactivated_at: "::timestamptz",
+};
+
 export async function updateBooking(bookingId, patch) {
-  const current = await getBooking(bookingId);
-  if (!current) return null;
+  const entries = Object.entries(patch || {}).filter(([key]) => Object.hasOwn(UPDATE_COLUMNS, key));
+  if (!entries.length) return getBooking(bookingId);
 
-  const merged = {
-    ...current,
-    ...patch,
-    booking_id: String(bookingId),
-    updated_at: new Date().toISOString(),
-  };
+  const values = [String(bookingId)];
+  const assignments = entries.map(([key, value], index) => {
+    const cast = UPDATE_COLUMNS[key];
+    values.push(cast === "::jsonb" ? JSON.stringify(value ?? null) : value);
+    return `${key} = $${index + 2}${cast}`;
+  });
+  assignments.push("updated_at = NOW()");
 
-  return upsertBooking(merged);
+  const res = await pool.query(
+    `UPDATE bookings SET ${assignments.join(", ")} WHERE booking_id = $1 RETURNING *`,
+    values
+  );
+  return mapRow(res.rows[0]);
+}
+
+export async function mutateCleaningChecklist(bookingId, mutate) {
+  const client = await pool.connect();
+  try {
+    await client.query("BEGIN");
+    const selected = await client.query(
+      "SELECT * FROM bookings WHERE booking_id = $1 FOR UPDATE",
+      [String(bookingId)]
+    );
+    const booking = mapRow(selected.rows[0]);
+    if (!booking) {
+      await client.query("ROLLBACK");
+      return null;
+    }
+
+    const cleaning = normalizeCleaningChecklist(booking.cleaning_checklist);
+    const nextCleaning = await mutate(cleaning, booking);
+    const updated = await client.query(
+      "UPDATE bookings SET cleaning_checklist = $2::jsonb, updated_at = NOW() WHERE booking_id = $1 RETURNING *",
+      [String(bookingId), JSON.stringify(normalizeCleaningChecklist(nextCleaning ?? cleaning))]
+    );
+    await client.query("COMMIT");
+    return mapRow(updated.rows[0]);
+  } catch (err) {
+    await client.query("ROLLBACK").catch(() => {});
+    throw err;
+  } finally {
+    client.release();
+  }
+}
+
+export async function addBookingNote(bookingId, note) {
+  return mutateCleaningChecklist(bookingId, (cleaning, booking) =>
+    appendBookingNote({ ...booking, cleaning_checklist: cleaning }, note)
+  );
 }
 
 export async function markReminderSent(bookingId, daysBefore) {
@@ -220,12 +290,7 @@ export async function markReminderSent(bookingId, daysBefore) {
 
   const reminders = { ...(current.reminders_sent || {}) };
   reminders[String(daysBefore)] = new Date().toISOString();
-
-  return upsertBooking({
-    ...current,
-    reminders_sent: reminders,
-    updated_at: new Date().toISOString(),
-  });
+  return updateBooking(bookingId, { reminders_sent: reminders });
 }
 
 export async function closeStore() {

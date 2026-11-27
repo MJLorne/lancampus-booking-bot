@@ -33,7 +33,8 @@ Beispiel:
 Der Channel enthält:
 
 -   Buchungsdetails (Embed)
--   Betreuer-System
+-   Betreuer-System (der Betreuer übernimmt auch die Reinigung)
+-   gepinnte LanCampus-Übersicht mit Notizen und Sonderwünschen
 -   Reinigungscheckliste
 -   Archiv-Buttons
 
@@ -59,6 +60,26 @@ Nur folgende Rollen dürfen Betreuer ändern:
 
 Der aktuelle Betreuer wird im Channel-Topic und als gepinnte Nachricht
 gespeichert.
+
+Der Betreuer ist zugleich für die anschließende Reinigung verantwortlich.
+Es gibt deshalb keinen getrennten Übergabeprozess an eine zweite Rolle.
+
+------------------------------------------------------------------------
+
+# Notizen und Sonderwünsche
+
+Mit `/notiz` können im jeweiligen Buchungskanal strukturierte Einträge
+hinterlegt werden:
+
+-   allgemeine Notiz
+-   Sonderwunsch
+-   Schaden
+-   Fundsache
+
+Die Einträge erscheinen zusammen mit Betreuer und Reinigungsstatus in der
+gepinnten LanCampus-Übersicht. Sie werden innerhalb der bestehenden
+Reinigungsdaten gespeichert, sodass keine zusätzliche Datenbankmigration
+erforderlich ist. Alte Buchungen ohne Notizfeld bleiben unverändert nutzbar.
 
 ------------------------------------------------------------------------
 
@@ -127,6 +148,8 @@ nachgeholt, solange die Anreise noch in der Zukunft liegt.
 | Command    | Berechtigung       | Funktion                                  |
 |------------|--------------------|-------------------------------------------|
 | `/refresh` | Manage Channels    | Embed, Topic und Reinigungsübersicht aktualisieren |
+| `/bookings` | Manage Channels   | Aktive LanCampus-Buchungen anzeigen |
+| `/notiz`   | Buchungskanal      | Notiz, Sonderwunsch, Schaden oder Fundsache hinterlegen |
 
 ------------------------------------------------------------------------
 
@@ -180,6 +203,7 @@ Komponenten:
 
       services/
         bookingService.js
+        bookingNotesService.js
         cleaningService.js
         archiveService.js
         reminderService.js
