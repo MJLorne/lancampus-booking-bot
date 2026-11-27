@@ -40,10 +40,49 @@ export function ensureTasksInChecklist(cleaning) {
     if (!area) continue;
     area.tasks ??= {};
     for (const [taskKey, label] of entries) {
-      area.tasks[taskKey] ??= { label, done: false, done_by: null, done_at: null };
+      const existing = area.tasks[taskKey] && typeof area.tasks[taskKey] === "object"
+        ? area.tasks[taskKey]
+        : {};
+      area.tasks[taskKey] = {
+        label,
+        done: false,
+        done_by: null,
+        done_at: null,
+        ...existing,
+      };
     }
   }
   return cleaning;
+}
+
+export function normalizeCleaningChecklist(cleaning) {
+  const base = defaultCleaningChecklist();
+  const source = cleaning && typeof cleaning === "object" ? structuredClone(cleaning) : {};
+  const sourceAreas = source.areas && typeof source.areas === "object" ? source.areas : {};
+  const areas = {};
+
+  for (const key of new Set([...Object.keys(base.areas), ...Object.keys(sourceAreas)])) {
+    const baseArea = base.areas[key] || { label: key, icon: "🧹", completed: false, tasks: {} };
+    const sourceArea = sourceAreas[key] && typeof sourceAreas[key] === "object" ? sourceAreas[key] : {};
+    areas[key] = {
+      ...baseArea,
+      ...sourceArea,
+      tasks: {
+        ...(baseArea.tasks || {}),
+        ...(sourceArea.tasks && typeof sourceArea.tasks === "object" ? sourceArea.tasks : {}),
+      },
+    };
+  }
+
+  return ensureTasksInChecklist({
+    ...base,
+    ...source,
+    meta: {
+      ...base.meta,
+      ...(source.meta && typeof source.meta === "object" ? source.meta : {}),
+    },
+    areas,
+  });
 }
 
 export function allAreasCompleted(cleaning) {
@@ -56,7 +95,7 @@ export function isCleaningCompleted(cleaning) {
 }
 
 export function canArchiveBooking(booking) {
-  const cleaning = ensureTasksInChecklist(booking?.cleaning_checklist || defaultCleaningChecklist());
+  const cleaning = normalizeCleaningChecklist(booking?.cleaning_checklist);
   return isCleaningCompleted(cleaning);
 }
 
@@ -88,9 +127,57 @@ export function cleaningFinishRow(cleaning) {
   );
 }
 
-export function renderCleaningOverviewText(cleaning) {
-  const lines = Object.values(cleaning?.areas || {}).map((a) => `${a.completed ? "🟢" : "⬜"} ${a.icon || "•"} ${a.label}`);
-  return `🧹 **Reinigung – Übersicht**\n${lines.join("\n")}\n\n_Öffne später einen Bereich, um die Detailpunkte abzuhaken._`;
+function escapeDiscordMentions(value) {
+  return String(value || "").replace(/@/g, "@\u200b");
+}
+
+function renderBookingNotes(cleaning) {
+  const notes = Array.isArray(cleaning?.meta?.notes) ? cleaning.meta.notes : [];
+  if (!notes.length) return "_Keine Notizen hinterlegt._";
+
+  const labels = {
+    allgemein: "Notiz",
+    sonderwunsch: "Sonderwunsch",
+    schaden: "Schaden",
+    fundsache: "Fundsache",
+  };
+
+  const visibleNotes = notes.slice(-5);
+  const hiddenCount = notes.length - visibleNotes.length;
+  const lines = visibleNotes.map((note) => {
+    const label = labels[note?.type] || labels.allgemein;
+    const rawText = escapeDiscordMentions(note?.text);
+    const text = rawText.length > 180 ? `${rawText.slice(0, 177)}…` : rawText || "—";
+    const author = escapeDiscordMentions(note?.created_by_name);
+    return `• **${label}:** ${text}${author ? ` _(von ${author})_` : ""}`;
+  });
+  if (hiddenCount > 0) lines.unshift(`_${hiddenCount} ältere Notiz${hiddenCount === 1 ? "" : "en"} ausgeblendet._`);
+  return lines.join("\n");
+}
+
+export function renderCleaningOverviewText(cleaning, booking = {}) {
+  const assigneeId = String(booking?.assignee?.user_id || "");
+  const assignee = /^\d{17,20}$/.test(assigneeId)
+    ? `<@${assigneeId}>`
+    : escapeDiscordMentions(booking?.assignee?.display_name) || "⚠️ noch nicht festgelegt";
+  const areas = Object.values(cleaning?.areas || {});
+  const lines = areas.map((a) => `${a.completed ? "🟢" : "⬜"} ${a.icon || "•"} ${a.label}`);
+  const cleaningStatus = cleaning?.meta?.completed
+    ? `✅ Abgeschlossen${cleaning.meta.completed_by ? ` von ${escapeDiscordMentions(cleaning.meta.completed_by)}` : ""}`
+    : `${areas.filter((a) => a.completed).length}/${areas.length} Bereiche erledigt`;
+
+  return [
+    "🏠 **LanCampus – Organisation**",
+    `👤 **Betreuer & Reinigung:** ${assignee}`,
+    "",
+    "📝 **Notizen & Sonderwünsche**",
+    renderBookingNotes(cleaning),
+    "",
+    `🧹 **Reinigung:** ${cleaningStatus}`,
+    ...lines,
+    "",
+    "_Bereich unten auswählen, um die Reinigungspunkte zu bearbeiten._",
+  ].join("\n").slice(0, 2000);
 }
 
 export function renderAreaDetailText(area) {

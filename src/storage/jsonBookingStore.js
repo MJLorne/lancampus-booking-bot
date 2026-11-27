@@ -1,5 +1,7 @@
 import fs from "fs/promises";
 import { bookingsFile, config } from "../config.js";
+import { appendBookingNote } from "../services/bookingNotesService.js";
+import { normalizeCleaningChecklist } from "../services/cleaningService.js";
 
 let writeQueue = Promise.resolve();
 
@@ -80,6 +82,31 @@ export async function updateBooking(bookingId, patch) {
     await saveBookings(bookings);
     return bookings[idx];
   });
+}
+
+export async function mutateCleaningChecklist(bookingId, mutate) {
+  return withLock(async () => {
+    const bookings = await loadBookings();
+    const idx = bookings.findIndex((b) => String(b.booking_id) === String(bookingId));
+    if (idx < 0) return null;
+
+    const cleaning = normalizeCleaningChecklist(bookings[idx].cleaning_checklist);
+    const nextCleaning = await mutate(cleaning, bookings[idx]);
+    bookings[idx] = {
+      ...bookings[idx],
+      cleaning_checklist: normalizeCleaningChecklist(nextCleaning ?? cleaning),
+      updated_at: new Date().toISOString(),
+    };
+
+    await saveBookings(bookings);
+    return bookings[idx];
+  });
+}
+
+export async function addBookingNote(bookingId, note) {
+  return mutateCleaningChecklist(bookingId, (cleaning, booking) =>
+    appendBookingNote({ ...booking, cleaning_checklist: cleaning }, note)
+  );
 }
 
 export async function markReminderSent(bookingId, daysBefore) {

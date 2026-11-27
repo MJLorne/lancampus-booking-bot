@@ -8,7 +8,7 @@ import {
 } from "../discord/renderers.js";
 import {
   defaultCleaningChecklist,
-  ensureTasksInChecklist,
+  normalizeCleaningChecklist,
   renderCleaningOverviewText,
   cleaningFinishRow,
   cleaningAreaSelectRow,
@@ -100,14 +100,14 @@ export async function syncOverviewMessage({ channel, booking, client, store, mem
 
 export async function ensureCleaningOverviewPinned({ channel, bookingId, store }) {
   const booking = await store.getBooking(bookingId);
-  const cleaning = ensureTasksInChecklist(booking?.cleaning_checklist || defaultCleaningChecklist());
-  const text = renderCleaningOverviewText(cleaning);
+  const cleaning = normalizeCleaningChecklist(booking?.cleaning_checklist);
+  const text = renderCleaningOverviewText(cleaning, booking);
   const components = [cleaningFinishRow(cleaning)];
 
   if (booking?.cleaning_overview_message_id) {
     const msg = await channel.messages.fetch(booking.cleaning_overview_message_id).catch(() => null);
     if (msg) {
-      await msg.edit({ content: text, components }).catch(() => {});
+      await msg.edit({ content: text, components, allowedMentions: { parse: [] } }).catch(() => {});
       const pinsRaw = await channel.messages.fetchPins().catch(() => []);
       const pins = normalizePins(pinsRaw);
       
@@ -118,10 +118,9 @@ export async function ensureCleaningOverviewPinned({ channel, bookingId, store }
     }
   }
 
-  const msg = await channel.send({ content: text, components });
+  const msg = await channel.send({ content: text, components, allowedMentions: { parse: [] } });
   await msg.pin().catch(() => {});
   await store.updateBooking(bookingId, {
-    cleaning_checklist: cleaning,
     cleaning_overview_message_id: msg.id
   });
   return msg;
@@ -150,9 +149,9 @@ export async function ensureCleaningSelectMessage({ channel, bookingId, store })
 }
 
 export async function upsertCleaningDetailMessage({ channel, bookingId, areaKey, store }) {
-  const booking = await store.getBooking(bookingId);
-  const cleaning = ensureTasksInChecklist(booking?.cleaning_checklist || defaultCleaningChecklist());
-  const area = cleaning.areas?.[areaKey];
+  const booking = await store.mutateCleaningChecklist(bookingId, (cleaning) => cleaning);
+  const cleaning = booking?.cleaning_checklist;
+  const area = cleaning?.areas?.[areaKey];
   if (!area) return null;
 
   const content = renderAreaDetailText(area);
@@ -162,14 +161,12 @@ export async function upsertCleaningDetailMessage({ channel, bookingId, areaKey,
     const msg = await channel.messages.fetch(booking.cleaning_detail_message_id).catch(() => null);
     if (msg) {
       await msg.edit({ content, components }).catch(() => {});
-      await store.updateBooking(bookingId, { cleaning_checklist: cleaning });
       return msg;
     }
   }
 
   const msg = await channel.send({ content, components });
   await store.updateBooking(bookingId, {
-    cleaning_checklist: cleaning,
     cleaning_detail_message_id: msg.id
   });
   return msg;
@@ -241,8 +238,7 @@ export async function createOrUpdateBookingFromWebhook({ body, client, store, au
   if (existing?.channel_id) {
     const existingChannel = await client.channels.fetch(existing.channel_id).catch(() => null);
     if (existingChannel?.isTextBased()) {
-      const updatedBooking = await store.upsertBooking({
-        booking_id: String(bookingId),
+      const updatedBooking = await store.updateBooking(String(bookingId), {
         start_date: normalizedStartDate,
         end_date: normalizedEndDate,
         start_time: start_time || null,
