@@ -16,6 +16,7 @@ import {
   buildTaskControls
 } from "./cleaningService.js";
 import { normalizeDateToYMD, buildFullName, slugify } from "../utils/booking.js";
+import { createKeyedCoalescer } from "../utils/keyedCoalescer.js";
 
 function normalizePins(pins) {
   if (!pins) return [];
@@ -174,16 +175,37 @@ export async function upsertCleaningDetailMessage({ channel, bookingId, areaKey,
   return msg;
 }
 
-export async function syncBookingChannel({ channel, booking, client, store, member }) {
+async function performBookingChannelSync({ channel, booking, client, store, member }) {
   if (!channel?.isTextBased() || !booking) return false;
-  await channel
-    .setTopic(buildChannelTopic(booking))
-    .catch((err) => console.error("setTopic failed:", err?.message || err));
+  const startedAt = Date.now();
+  try {
+    await channel
+      .setTopic(buildChannelTopic(booking))
+      .catch((err) => console.error("setTopic failed:", err?.message || err));
 
-  const edited = await syncOverviewMessage({ channel, booking, client, store, member });
-  await ensureCleaningOverviewPinned({ channel, bookingId: String(booking.booking_id), store });
-  await ensureCleaningSelectMessage({ channel, bookingId: String(booking.booking_id), store });
-  return edited;
+    const edited = await syncOverviewMessage({ channel, booking, client, store, member });
+    await ensureCleaningOverviewPinned({ channel, bookingId: String(booking.booking_id), store });
+    await ensureCleaningSelectMessage({ channel, bookingId: String(booking.booking_id), store });
+    return edited;
+  } finally {
+    try {
+      console.info(
+        `[booking-sync] booking=${booking.booking_id} channel=${channel.id || "unknown"} duration_ms=${Date.now() - startedAt}`
+      );
+    } catch {}
+  }
+}
+
+const coalescedBookingChannelSync = createKeyedCoalescer(performBookingChannelSync, {
+  onCoalesced: ({ key, count }) => {
+    console.info(`[booking-sync] coalesced key=${key} count=${count}`);
+  }
+});
+
+export function syncBookingChannel(args) {
+  const key = args?.channel?.id || args?.booking?.booking_id;
+  if (!key) return performBookingChannelSync(args || {});
+  return coalescedBookingChannelSync(String(key), args);
 }
 
 export async function createOrUpdateBookingFromWebhook({ body, client, store, audit }) {
