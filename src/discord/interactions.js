@@ -19,6 +19,8 @@ import { handleChatInputCommand } from "./commands.js";
 
 export function registerInteractionHandlers(client, deps) {
   client.on("interactionCreate", async (interaction) => {
+    let deferredEphemeralReply = false;
+    let deferredEphemeralReplyFinalized = false;
     try {
       if (interaction.isChatInputCommand()) {
         const handled = await handleChatInputCommand(interaction, deps);
@@ -33,6 +35,22 @@ export function registerInteractionHandlers(client, deps) {
       const channel = interaction.channel;
       const member = interaction.member;
       const memberName = member?.displayName || interaction.user?.username || "Unbekannt";
+      const isAssigneeSelection =
+        interaction.isStringSelectMenu() && interaction.customId === "select_assignee";
+
+      if (isAssigneeSelection) {
+        if (!canChangeAssignee(member)) {
+          await interaction.reply({
+            content: "❌ Nur Admins oder berechtigte Staff-Rollen dürfen den Betreuer ändern.",
+            flags: MessageFlags.Ephemeral
+          });
+          return;
+        }
+
+        await interaction.deferReply({ flags: MessageFlags.Ephemeral });
+        deferredEphemeralReply = true;
+      }
+
       const channelBooking = await store.getBookingByChannelId(channel?.id);
       const bookingId = channelBooking?.booking_id;
 
@@ -74,22 +92,11 @@ export function registerInteractionHandlers(client, deps) {
       }
 
       if (interaction.isStringSelectMenu() && interaction.customId === "select_assignee") {
-        if (!canChangeAssignee(member)) {
-          await interaction.reply({
-            content: "❌ Nur Admins oder berechtigte Staff-Rollen dürfen den Betreuer ändern.",
-            flags: MessageFlags.Ephemeral
-          });
-          return;
-        }
-
         const selectedUserId = interaction.values?.[0];
-        const booking = await store.getBookingByChannelId(channel.id);
+        const booking = channelBooking;
 
         if (!booking) {
-          await interaction.reply({
-            content: "❌ Buchung konnte nicht geladen werden.",
-            flags: MessageFlags.Ephemeral
-          });
+          await interaction.editReply({ content: "❌ Buchung konnte nicht geladen werden." });
           return;
         }
 
@@ -104,10 +111,10 @@ export function registerInteractionHandlers(client, deps) {
           }
         });
 
-        await interaction.reply({
-          content: `👤 Betreuer geändert auf **${memberObj.displayName}**`,
-          flags: MessageFlags.Ephemeral
+        await interaction.editReply({
+          content: `👤 Betreuer geändert auf **${memberObj.displayName}**`
         });
+        deferredEphemeralReplyFinalized = true;
 
         await pinSingleAssignee(channel, memberObj.displayName, memberObj.id, client.user.id);
         await syncBookingChannel({ channel, booking: updatedBooking, client, store, member });
@@ -347,7 +354,9 @@ export function registerInteractionHandlers(client, deps) {
     } catch (err) {
       console.error("interactionCreate error:", err);
       try {
-        if (interaction.isRepliable() && !interaction.replied && !interaction.deferred) {
+        if (deferredEphemeralReply && !deferredEphemeralReplyFinalized && interaction.isRepliable()) {
+          await interaction.editReply({ content: "❌ Fehler bei der Aktion." });
+        } else if (interaction.isRepliable() && !interaction.replied && !interaction.deferred) {
           await interaction.reply({
             content: "❌ Fehler bei der Aktion.",
             flags: MessageFlags.Ephemeral
